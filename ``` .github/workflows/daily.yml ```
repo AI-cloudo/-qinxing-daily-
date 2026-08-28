@@ -1,0 +1,58 @@
+```yaml
+name: 每日禽类行情云端更新
+
+on:
+  schedule:
+    - cron: '50 22 * * *'
+    - cron: '50 23 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: daily-report
+  cancel-in-progress: false
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 抓取最新行情并生成页面
+        run: |
+          python scrape.py
+          python render.py
+
+      - name: 把最新数据提交回仓库
+        run: |
+          git config user.name "auto-report-bot"
+          git config user.email "actions@github.com"
+          git add data.json state.json index.html
+          git diff --cached --quiet || git commit -m "自动更新 $(date -u +'%Y-%m-%d %H:%M') UTC"
+          git push
+
+      - name: 配置 GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: 上传页面
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: 发布到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+```
