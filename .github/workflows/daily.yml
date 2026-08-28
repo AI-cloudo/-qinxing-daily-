@@ -1,15 +1,17 @@
-```yaml
 name: 每日禽类行情云端更新
 
 on:
   schedule:
+    # GitHub 用世界标准时(UTC)：北京时间 = UTC + 8
+    # 22:50 UTC = 北京 06:50 | 23:50 UTC = 北京 07:50
+    # 每天跑两次：第一次尽量早，第二次兜底，保证 8 点前更新完毕
     - cron: '50 22 * * *'
     - cron: '50 23 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch: {}   # 允许手动触发
 
 permissions:
-  contents: write
-  pages: write
+  contents: write   # 自动提交 data.json/index.html 回仓库
+  pages: write       # 发布页面
   id-token: write
 
 concurrency:
@@ -36,7 +38,7 @@ jobs:
           python scrape.py
           python render.py
 
-      - name: 把最新数据提交回仓库
+      - name: 把最新数据提交回仓库（作为明天的环比基准）
         run: |
           git config user.name "auto-report-bot"
           git config user.email "actions@github.com"
@@ -55,4 +57,3 @@ jobs:
       - name: 发布到 GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-```
