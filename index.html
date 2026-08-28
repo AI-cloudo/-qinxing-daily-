@@ -2,887 +2,534 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>全国禽类行情日报 | 2026-08-28</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1e3a2f">
+<title>禽类采购工作台</title>
 <style>
-:root {
-  --bg: #f5f6fa;
-  --card-bg: #ffffff;
-  --text: #1a1a2e;
-  --text-sec: #555;
-  --text-muted: #999;
-  --accent: #d4380d;
-  --accent-light: #fff2e8;
-  --up: #cf1322;
-  --down: #389e0d;
-  --flat: #8c8c8c;
-  --border: #e8e8e8;
-  --shadow: 0 1px 4px rgba(0,0,0,0.06);
-  --radius: 8px;
+:root{
+  --bg:#f3f5f4; --card:#ffffff; --line:#e5e9e7;
+  --ink:#1c2b24; --sub:#6b7a72; --brand:#1e3a2f; --brand2:#2f5d3a;
+  --up:#d63b3b; --down:#0f9d5f; --flat:#9aa5a0; --accent:#e8a33d;
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  line-height: 1.6;
-  font-size: 14px;
-}
-.container { max-width: 960px; margin: 0 auto; padding: 20px; }
-
-/* Header */
-.header {
-  background: linear-gradient(135deg, #d4380d, #fa541c);
-  color: #fff;
-  padding: 24px 28px;
-  border-radius: var(--radius);
-  margin-bottom: 20px;
-  box-shadow: 0 2px 8px rgba(212,56,13,0.2);
-}
-.header h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
-.header .subtitle { font-size: 13px; opacity: 0.9; }
-.header .date-badge {
-  display: inline-block;
-  background: rgba(255,255,255,0.2);
-  padding: 2px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-  margin-top: 6px;
-}
-
-/* Section */
-.section {
-  background: var(--card-bg);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  margin-bottom: 16px;
-  overflow: hidden;
-}
-.section-header {
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.section-header .icon { font-size: 18px; }
-.section-header h2 { font-size: 16px; font-weight: 600; flex: 1; }
-.section-header .tag {
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--bg);
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-.section-body { padding: 16px 20px; }
-
-/* Tables */
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th {
-  text-align: left;
-  padding: 8px 10px;
-  background: #fafafa;
-  color: var(--text-sec);
-  font-weight: 600;
-  border-bottom: 2px solid var(--border);
-  white-space: nowrap;
-}
-td { padding: 7px 10px; border-bottom: 1px solid #f0f0f0; }
-tr:last-child td { border-bottom: none; }
-tr:hover td { background: #fafcff; }
-
-.up { color: var(--up); font-weight: 600; }
-.down { color: var(--down); font-weight: 600; }
-.flat { color: var(--flat); }
-
-/* ===== 核心品类走势总览 ===== */
-.trend-overview {
-  background: var(--card-bg);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  margin-bottom: 16px;
-  overflow: hidden;
-}
-.trend-overview .section-header {
-  background: linear-gradient(135deg, #1a1a2e, #2d2d44);
-  border-bottom: none;
-}
-.trend-overview .section-header h2 { color: #fff; }
-.trend-overview .section-header .tag { background: rgba(255,255,255,0.15); color: #ddd; }
-.trend-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
-  padding: 16px 20px;
-}
-.trend-card {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px 16px;
-  background: #fdfdfd;
-}
-.trend-card .tc-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-.trend-card .tc-name { font-size: 15px; font-weight: 700; }
-.trend-card .tc-name .emoji { margin-right: 4px; }
-.trend-card .tc-price { font-size: 22px; font-weight: 700; color: var(--accent); }
-.trend-card .tc-price .unit { font-size: 12px; color: var(--text-sec); font-weight: 400; }
-.trend-card .tc-days {
-  display: flex;
-  gap: 6px;
-  margin: 8px 0 4px;
-  flex-wrap: wrap;
-}
-.day-chip {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-}
-.day-chip .lbl { color: var(--text-muted); margin-right: 3px; }
-.trend-card .tc-note {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 4px;
-  line-height: 1.5;
-}
-.trend-card svg { width: 100%; height: auto; display: block; margin-top: 6px; }
-
-/* 涨跌表 */
-.wave-table { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 8px; }
-.wave-table .wt-title { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
-.wave-table table { font-size: 12px; }
-.wave-table th { padding: 4px 8px; }
-.wave-table td { padding: 4px 8px; }
-
-/* 行情分析盒 */
-.analysis-box {
-  border: 1px solid #ffd8c4;
-  background: linear-gradient(135deg, #fff8f4, #fff);
-  border-radius: 6px;
-  padding: 14px 16px;
-  margin-top: 14px;
-}
-.analysis-box .ab-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent);
-  margin-bottom: 8px;
-}
-.analysis-box .ab-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.analysis-box .ab-col h4 { font-size: 12px; color: var(--text-sec); margin-bottom: 4px; }
-.analysis-box .ab-col ul { list-style: none; }
-.analysis-box .ab-col li {
-  font-size: 12.5px;
-  padding: 2px 0 2px 14px;
-  position: relative;
-}
-.analysis-box .ab-col li::before { content: "•"; position: absolute; left: 2px; color: var(--accent); }
-@media (max-width: 640px) { .analysis-box .ab-grid { grid-template-columns: 1fr; } }
-
-/* National Summary */
-.national-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.summary-card {
-  background: linear-gradient(135deg, #fff7f3, #fff);
-  border: 1px solid #ffd8c4;
-  border-radius: 6px;
-  padding: 14px 16px;
-}
-.summary-card .label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
-.summary-card .value { font-size: 20px; font-weight: 700; color: var(--accent); }
-.summary-card .unit { font-size: 12px; color: var(--text-sec); }
-.summary-card .trend { font-size: 12px; margin-top: 4px; }
-
-.trend-banner {
-  background: var(--accent-light);
-  border-left: 3px solid var(--accent);
-  padding: 10px 14px;
-  border-radius: 4px;
-  margin-bottom: 14px;
-  font-size: 13px;
-}
-.trend-banner strong { color: var(--accent); }
-
-/* Expandable Region - 直接平铺展示（无折叠） */
-.region-list { display: flex; flex-direction: column; gap: 8px; }
-.region-item { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.region-header {
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  background: #fafafa;
-  border-bottom: 1px solid #f0f0f0;
-}
-.region-header .arrow { display: none; }
-.region-header .name { font-weight: 600; font-size: 14px; margin-left: 8px; flex: 1; }
-.region-header .price-range { font-size: 13px; color: var(--text-sec); }
-.region-header .price-range .hi { color: var(--accent); font-weight: 600; }
-.region-detail { max-height: none; overflow: visible; }
-.region-detail-inner { padding: 8px 16px 12px; }
-
-.policy-item { padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
-.policy-item:last-child { border-bottom: none; }
-.policy-item .title { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
-.policy-item .desc { font-size: 12px; color: var(--text-sec); }
-
-.analysis-final { background: #f6f8fc; border-radius: 6px; padding: 14px 16px; }
-.analysis-final h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--accent); }
-.analysis-final ul { list-style: none; }
-.analysis-final li { padding: 4px 0; font-size: 13px; padding-left: 16px; position: relative; }
-.analysis-final li::before { content: "▸"; position: absolute; left: 0; color: var(--accent); }
-
-.badge {
-  display: inline-block;
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  margin-left: 4px;
-}
-.badge-opportunity { background: #f6ffed; color: var(--down); border: 1px solid #b7eb8f; }
-.badge-risk { background: #fff1f0; color: var(--up); border: 1px solid #ffa39e; }
-
-.footer { text-align: center; padding: 16px; font-size: 12px; color: var(--text-muted); }
-/* ===== 移动端优化（手机查看优先） ===== */
-.section-body, .section { overflow-x: clip; }
-.national-summary, .trend-cards { min-width: 0; }
-@media (max-width: 640px) {
-  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
-  .container { padding: 12px 10px; }
-  header h1 { font-size: 20px !important; }
-  .subtitle { font-size: 12px !important; }
-  .section-header h2 { font-size: 15px !important; }
-  .section-body { padding: 12px 10px !important; }
-  .national-summary { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .summary-card { padding: 10px 12px; }
-  .summary-card .value { font-size: 16px; }
-  table { font-size: 12px; }
-  th, td { padding: 6px 8px !important; }
-  .analysis-box .ab-col li { font-size: 12px; line-height: 1.5; }
-  .trend-banner { font-size: 13px; }
-}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{font-size:15px}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;padding-bottom:60px}
+header{position:sticky;top:0;z-index:50;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:14px 16px 12px;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+.hd-top{display:flex;align-items:center;justify-content:space-between}
+.hd-title{font-size:18px;font-weight:700;letter-spacing:.5px}
+.hd-title .ico{margin-right:6px}
+.hd-date{font-size:12px;opacity:.92;margin-top:3px}
+.hd-badge{font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.16);white-space:nowrap}
+.hd-badge.live{background:#34c98f;color:#0b2b1d;font-weight:600}
+.hd-badge.snap{background:#f0b45a;color:#5c3a05;font-weight:600}
+.hd-search{font-size:18px;cursor:pointer;padding:4px;opacity:.95}
+.hd-search.active{opacity:1}
+.hd-refresh{font-size:17px;cursor:pointer;padding:4px;color:#fff;opacity:.95;transition:opacity .2s}
+.hd-refresh:active{opacity:.6}
+/* 搜索面板 */
+.search-panel{max-height:0;overflow:hidden;transition:max-height .25s ease,opacity .2s;opacity:0;background:#fff;color:var(--ink);border-radius:0 0 14px 14px;margin:-12px -16px 12px;padding:0 16px;box-shadow:0 4px 10px rgba(0,0,0,.12)}
+.search-panel.open{max-height:70px;opacity:1;padding-top:10px;padding-bottom:10px}
+.search-panel input{width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:14px;background:#fafbfa;outline:none}
+.search-panel input:focus{border-color:var(--brand2)}
+main{max-width:860px;margin:0 auto;padding:12px 12px 0}
+.card{background:var(--card);border-radius:14px;box-shadow:0 1px 4px rgba(30,58,47,.07);padding:14px;margin-bottom:12px}
+.card-t{font-size:13px;font-weight:600;color:var(--sub);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+/* 速览卡 */
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
+.scard{background:var(--card);border-radius:14px;box-shadow:0 1px 4px rgba(30,58,47,.07);padding:12px 10px;position:relative;overflow:hidden}
+.scard .nm{font-size:12px;color:var(--sub);margin-bottom:4px}
+.scard .pr{font-size:18px;font-weight:800;letter-spacing:-.3px}
+.scard .pr small{font-size:10px;font-weight:400;color:var(--sub)}
+.scard .cmp{display:flex;flex-wrap:wrap;gap:4px 8px;margin-top:6px;min-height:20px}
+.scard .cmp .tag{font-size:10px;padding:2px 6px;border-radius:12px;background:#f2f4f3;font-weight:600;white-space:nowrap}
+.scard .cmp .tag.up{background:#fdecec;color:var(--up)}
+.scard .cmp .tag.down{background:#e9f7f0;color:var(--down)}
+.scard .cmp .tag.flat{background:#eef0ee;color:var(--flat)}
+.scard svg{width:100%;height:34px;margin-top:6px;display:block}
+.scard .nt{font-size:10px;color:var(--sub);margin-top:6px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* 搜索 */
+.search-row{display:flex;gap:8px;margin-top:10px}
+.search-row input{flex:1;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:14px;background:#fafbfa;outline:none}
+.search-row input:focus{border-color:var(--brand2)}
+.sec-foot{background:#f6f9f7;border-radius:10px;padding:10px 12px;margin-top:12px}
+.sec-foot .foot-t{font-size:12px;font-weight:700;color:var(--brand2);margin-bottom:5px}
+.sec-foot p{font-size:12.5px;line-height:1.6;color:var(--ink);margin-bottom:4px}
+.sec-foot p.notice-p{font-size:11.5px;color:#b8860b;background:#fffbf0;border-radius:6px;padding:4px 6px}
+.sec-foot p:last-child{margin-bottom:0}
+/* tabs */
+nav.tabs{position:sticky;top:76px;z-index:40;background:var(--bg);padding:6px 0 8px;display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{flex-shrink:0;border:none;background:var(--card);color:var(--sub);font-size:13px;padding:8px 14px;border-radius:20px;box-shadow:0 1px 3px rgba(30,58,47,.08);cursor:pointer}
+nav.tabs button.on{background:var(--brand2);color:#fff;font-weight:600}
+/* 板块内容 */
+.sec-title{font-size:16px;font-weight:700;margin:4px 0 10px;color:var(--ink)}
+.ana{background:#fffdf5;border:1px solid #f3e7c8;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.6}
+.ana .a-t{font-size:12px;font-weight:700;color:#8a6d1f;margin-bottom:5px}
+.ana .a-up{color:var(--ink)}
+.ana .a-ref{color:#8a7a4d;margin-top:4px}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:10px;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:480px}
+th{background:#f0f3f1;color:#55645c;font-weight:600;text-align:left;padding:8px 9px;white-space:nowrap;border-bottom:1px solid var(--line)}
+td{padding:8px 9px;border-bottom:1px solid #f0f2f1;white-space:nowrap;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:nth-child(even) td{background:#fafbfa}
+td.c-up{color:var(--up);font-weight:700}
+td.c-down{color:var(--down);font-weight:700}
+td.c-flat{color:var(--flat)}
+td .fav-btn{border:none;background:none;font-size:15px;cursor:pointer;padding:0 4px;opacity:.55}
+td .fav-btn.on{opacity:1}
+.tbl-cap{font-size:11.5px;font-weight:700;color:var(--brand2);padding:8px 10px 4px}
+.hl{background:#ffe08a;border-radius:2px}
+/* 收藏夹 */
+.favs .fitem{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:8px 10px;background:#f6f9f7;border-radius:10px;margin-bottom:6px;cursor:pointer}
+.favs .fitem .ftag{flex-shrink:0;font-size:10px;background:var(--brand2);color:#fff;padding:2px 7px;border-radius:10px}
+.favs .fitem .ftxt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.favs .fitem .x{border:none;background:none;color:var(--sub);font-size:14px;cursor:pointer;padding:2px}
+/* 搜索结果 */
+.res .ritem{padding:9px 11px;border-bottom:1px dashed var(--line);font-size:12.5px;cursor:pointer}
+.res .ritem:last-child{border-bottom:none}
+.res .rtag{font-size:10px;background:#eef2f0;color:var(--brand2);padding:2px 6px;border-radius:8px;margin-right:6px}
+/* 提示条 */
+.toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%) translateY(20px);background:rgba(20,30,26,.92);color:#fff;font-size:13px;padding:10px 18px;border-radius:24px;opacity:0;transition:all .3s;z-index:99;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+footer{text-align:center;font-size:11px;color:#a3aca6;padding:18px 12px 8px;line-height:1.7}
+/* 新闻资讯 */
+.news .news-list{display:flex;flex-direction:column;gap:8px}
+.news .nitem{display:block;text-decoration:none;color:var(--ink);background:#f6f9f7;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.5}
+.news .nitem .ntop{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:3px}
+.news .nitem .ntitle{flex:1;font-weight:600}
+.news .nitem .ndate{flex-shrink:0;font-size:10px;color:var(--sub);white-space:nowrap;background:#fff;padding:1px 6px;border-radius:8px}
+.news .nitem .nsrc{font-size:10px;color:var(--sub);margin-top:4px}
+.news .nitem-empty{text-align:center;color:var(--sub);font-size:12px;padding:14px}
 </style>
 </head>
 <body>
-<div class="container">
-<div class="header">
-<h1>🐔 全国禽类行情日报</h1>
-<div class="subtitle">覆盖淘汰鸡 · 鸡蛋 · 三黄鸡 · 公鸡（含黑凤公鸡） · 白羽肉鸡</div>
-<span class="date-badge">2026年8月28日 周五 · 自动生成</span>
-</div>
-<div class="trend-overview">
-<div class="section-header"><span class="icon">📈</span><h2>核心品类全国均价走势（老母鸡 / 三黄鸡 / 公鸡）</h2><span class="tag">近3天 · 7天 · 10天</span></div>
-<div class="trend-cards">
-<div class="trend-card">
-<div class="tc-head">
-<span class="tc-name"><span class="emoji">🐔</span>老母鸡</span>
-<span class="tc-price">5.95<span class="unit"> 元/斤</span></span>
-</div>
-<div class="tc-days"><span class="day-chip"><span class="lbl">3天</span><span class="down">↓4.7%</span></span><span class="day-chip"><span class="lbl">7天</span><span class="down">↓6.0%</span></span><span class="day-chip"><span class="lbl">10天</span><span class="down">↓6.0%</span></span></div>
-<svg viewBox="0 0 300 110" xmlns="http://www.w3.org/2000/svg">
-<line x1="30" y1="20" x2="270" y2="20" stroke="#eee" stroke-width="1"/>
-<line x1="30" y1="48" x2="270" y2="48" stroke="#f5f5f5" stroke-width="1"/>
-<line x1="30" y1="77" x2="270" y2="77" stroke="#eee" stroke-width="1"/>
-<text x="34" y="16" font-size="9" fill="#999">6.4</text>
-<text x="34" y="75" font-size="9" fill="#999">5.8</text>
-<polyline points="30.0,27.2 78.0,31.4 126.0,38.3 174.0,35.5 222.0,46.7 270.0,78.8" fill="none" stroke="#cf1322" stroke-width="2"/>
-<circle cx="30.0" cy="27.2" r="3" fill="#cf1322"/>
-<text x="22" y="41" font-size="8" fill="#cf1322">6.19</text>
-<circle cx="78.0" cy="31.4" r="3" fill="#cf1322"/>
-<text x="70" y="25" font-size="8" fill="#555">6.16</text>
-<circle cx="126.0" cy="38.3" r="3" fill="#cf1322"/>
-<text x="118" y="32" font-size="8" fill="#555">6.11</text>
-<circle cx="174.0" cy="35.5" r="3" fill="#cf1322"/>
-<text x="166" y="30" font-size="8" fill="#555">6.13</text>
-<circle cx="222.0" cy="46.7" r="3" fill="#cf1322"/>
-<text x="214" y="41" font-size="8" fill="#555">6.05</text>
-<circle cx="270.0" cy="78.8" r="4" fill="#d4380d"/>
-<text x="240" y="71" font-size="9" fill="#d4380d">5.82今</text>
-<text x="22" y="104" font-size="8" fill="#999">8/18</text>
-<text x="69" y="104" font-size="8" fill="#999">8/19</text>
-<text x="116" y="104" font-size="8" fill="#999">8/20</text>
-<text x="164" y="104" font-size="8" fill="#999">8/26</text>
-<text x="211" y="104" font-size="8" fill="#999">8/27</text>
-<text x="258" y="104" font-size="8" fill="#999">8/28</text>
-</svg>
-<div class="wave-table">
-<div class="wt-title">近10日数据点（全国均价，众合/肉类食品网）</div>
-<table>
-<thead>
-<tr>
-<th>日期</th>
-<th>8/18</th>
-<th>8/19</th>
-<th>8/20</th>
-<th>8/26</th>
-<th>8/27</th>
-<th>8/28</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>均价</td><td>6.19</td><td>6.16</td><td>6.11</td><td>6.13</td><td>6.05</td><td class="down">5.82</td></tr>
-</tbody>
-</table>
-</div>
-<div class="tc-note">全国淘汰鸡均价 5.82 元/斤（8/28，11省）。云端自动更新，数据源：鸡病专业网。</div>
-</div>
-<div class="trend-card">
-<div class="tc-head">
-<span class="tc-name"><span class="emoji">🐓</span>三黄鸡</span>
-<span class="tc-price">7.6~7.8<span class="unit"> 元/斤</span></span>
-</div>
-<div class="tc-days"><span class="day-chip"><span class="lbl">3天</span><span class="flat">→0.0%</span></span><span class="day-chip"><span class="lbl">7天</span><span class="flat">→0.0%</span></span><span class="day-chip"><span class="lbl">10天</span><span class="flat">→0.0%</span></span></div>
-<svg viewBox="0 0 300 110" xmlns="http://www.w3.org/2000/svg">
-<line x1="30" y1="20" x2="270" y2="20" stroke="#eee" stroke-width="1"/>
-<line x1="30" y1="48" x2="270" y2="48" stroke="#f5f5f5" stroke-width="1"/>
-<line x1="30" y1="77" x2="270" y2="77" stroke="#eee" stroke-width="1"/>
-<text x="34" y="16" font-size="9" fill="#999">7.9</text>
-<text x="34" y="75" font-size="9" fill="#999">7.0</text>
-<polyline points="30.0,78.8 90.0,78.8 150.0,78.8 210.0,78.8 270.0,78.8" fill="none" stroke="#cf1322" stroke-width="2"/>
-<circle cx="30.0" cy="78.8" r="3" fill="#cf1322"/>
-<text x="22" y="73" font-size="8" fill="#cf1322">5.1</text>
-<circle cx="90.0" cy="78.8" r="3" fill="#cf1322"/>
-<text x="82" y="73" font-size="8" fill="#555">5.1</text>
-<circle cx="150.0" cy="78.8" r="3" fill="#cf1322"/>
-<text x="142" y="73" font-size="8" fill="#555">5.1</text>
-<circle cx="210.0" cy="78.8" r="3" fill="#cf1322"/>
-<text x="202" y="73" font-size="8" fill="#555">5.1</text>
-<circle cx="270.0" cy="78.8" r="4" fill="#d4380d"/>
-<text x="240" y="71" font-size="9" fill="#d4380d">5.1今</text>
-<text x="110" y="104" font-size="8" fill="#389e0d">浙江快大三黄（冻品口径）：5.1持平</text>
-<polyline points="30.0,29.2 90.0,27.2 150.0,27.2 210.0,27.2 270.0,27.2" fill="none" stroke="#389e0d" stroke-width="1.5" stroke-dasharray="4,3"/>
-<text x="110" y="104" font-size="8" fill="#389e0d">三黄项鲜销参考：7.7持平</text>
-<text x="22" y="104" font-size="8" fill="#999">8/24</text>
-<text x="81" y="104" font-size="8" fill="#999">8/25</text>
-<text x="140" y="104" font-size="8" fill="#999">8/26</text>
-<text x="199" y="104" font-size="8" fill="#999">8/27</text>
-<text x="258" y="104" font-size="8" fill="#999">8/28</text>
-</svg>
-<div class="wave-table">
-<div class="wt-title">近10日数据点（红=广东三黄项，绿=浙江快大三黄）</div>
-<table>
-<thead>
-<tr>
-<th>日期</th>
-<th>8/24</th>
-<th>8/25</th>
-<th>8/26</th>
-<th>8/27</th>
-<th>8/28</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>浙江快大三黄（冻品口径）：5.1持平</td><td>5.10</td><td>5.10</td><td>5.10</td><td>5.10</td><td class="flat">5.10</td></tr>
-</tbody>
-</table>
-</div>
-<div class="tc-note">冻品流通口径：浙江快大三黄5.1元/斤持平，快大类整体4.0-5.3元/斤低位持稳，屠宰原料成本稳定；虚线为活禽鲜销三黄项（7.6-7.8）不同市场，勿混价。</div>
-</div>
-<div class="trend-card">
-<div class="tc-head">
-<span class="tc-name"><span class="emoji">🐓</span>公鸡</span>
-<span class="tc-price">7.0<span class="unit"> 元/斤</span></span>
-</div>
-<div class="tc-days"><span class="day-chip"><span class="lbl">3天</span><span class="flat">→0.0%</span></span><span class="day-chip"><span class="lbl">7天</span><span class="up">↑2.9%</span></span><span class="day-chip"><span class="lbl">10天</span><span class="up">↑2.9%</span></span></div>
-<svg viewBox="0 0 300 110" xmlns="http://www.w3.org/2000/svg">
-<line x1="30" y1="20" x2="270" y2="20" stroke="#eee" stroke-width="1"/>
-<line x1="30" y1="48" x2="270" y2="48" stroke="#f5f5f5" stroke-width="1"/>
-<line x1="30" y1="77" x2="270" y2="77" stroke="#eee" stroke-width="1"/>
-<text x="34" y="16" font-size="9" fill="#999">7.2</text>
-<text x="34" y="75" font-size="9" fill="#999">6.0</text>
-<polyline points="30.0,78.8 90.0,27.2 150.0,27.2 210.0,27.2 270.0,27.2" fill="none" stroke="#cf1322" stroke-width="2"/>
-<circle cx="30.0" cy="78.8" r="3" fill="#cf1322"/>
-<text x="22" y="73" font-size="8" fill="#cf1322">6.8</text>
-<circle cx="90.0" cy="27.2" r="3" fill="#cf1322"/>
-<text x="82" y="41" font-size="8" fill="#555">7.0</text>
-<circle cx="150.0" cy="27.2" r="3" fill="#cf1322"/>
-<text x="142" y="41" font-size="8" fill="#555">7.0</text>
-<circle cx="210.0" cy="27.2" r="3" fill="#cf1322"/>
-<text x="202" y="41" font-size="8" fill="#555">7.0</text>
-<circle cx="270.0" cy="27.2" r="4" fill="#d4380d"/>
-<text x="240" y="41" font-size="9" fill="#d4380d">7.0今</text>
-<text x="22" y="104" font-size="8" fill="#999">8/21</text>
-<text x="81" y="104" font-size="8" fill="#999">8/24</text>
-<text x="140" y="104" font-size="8" fill="#999">8/25</text>
-<text x="199" y="104" font-size="8" fill="#999">8/27</text>
-<text x="258" y="104" font-size="8" fill="#999">8/28</text>
-</svg>
-<div class="wave-table">
-<div class="wt-title">近10日数据点（浙江矮脚黄公鸡，华东代表）</div>
-<table>
-<thead>
-<tr>
-<th>日期</th>
-<th>8/21</th>
-<th>8/24</th>
-<th>8/25</th>
-<th>8/27</th>
-<th>8/28</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>均价</td><td>6.80</td><td>7.00</td><td>7.00</td><td>7.00</td><td class="flat">7.00</td></tr>
-</tbody>
-</table>
-</div>
-<div class="tc-note">全国公鸡区间5.2-8.3元/斤 · 中元节后多地转稳（客户进货信心不强）· 山东麻公涨后企稳、山西麻公6.6-6.9高位</div>
-</div>
-</div>
-</div>
-<div class="section">
-<div class="section-header">
-<span class="icon">📉</span>
-<h2>一、淘汰鸡行情（全国各省）</h2>
-<span class="tag">数据日期 8/28 · 鸡病专业网 · 云端自动更新</span>
-</div>
-<div class="section-body">
-<div class="trend-banner"><strong>全国均价续跌至 5.95 元/斤左右 ↓约0.1</strong>（禽报网样本口径5.72 ↓0.12）· 多省红鸡屠宰价下调0.1-0.3 · 河北粉鸡屠宰压至5.00-5.10全国最低 · 周出栏量环比+8.86%、集中淘汰持续</div>
-<table>
-<thead>
-<tr>
-<th>省份</th>
-<th>淘汰鸡价（元/斤）</th>
-<th>环比</th>
-<th>覆盖城市（同价）</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>江苏</td><td>6.30</td><td class="down">↓0.10</td><td>淮安淮阴/昆山/连云港灌云/南京等17市</td></tr>
-<tr><td>河南</td><td>6.00</td><td class="down">↓0.20</td><td>安阳纸箱/新乡/濮阳/焦作等17市</td></tr>
-<tr><td>山东</td><td>6.00</td><td class="down">↓0.10</td><td>滨州/德州/菏泽/济南等13市</td></tr>
-<tr><td>安徽</td><td>6.00</td><td class="flat">→</td><td>巢湖/阜阳/阜南/淮北等11市</td></tr>
-<tr><td>黑龙江</td><td>5.90</td><td class="down">↓0.10</td><td>海林/牡丹江/双鸭山/伊春等6市</td></tr>
-<tr><td>吉林</td><td>5.90</td><td class="down">↓0.10</td><td>四平/吉林/辽源</td></tr>
-<tr><td>内蒙古</td><td>5.90</td><td class="down">↓0.10</td><td>赤峰/呼和浩特</td></tr>
-<tr><td>陕西</td><td>5.70</td><td class="down">↓0.20</td><td>宝鸡出场价/商洛散筐价</td></tr>
-<tr><td>山西</td><td>5.70</td><td class="down">↓0.20</td><td>长治/大同/曲沃/文水等10市</td></tr>
-<tr><td>辽宁</td><td>5.45</td><td class="down">↓0.07</td><td>大连庄河/锦州纸箱/朝阳</td></tr>
-<tr><td>河北</td><td>5.20</td><td class="down">↓0.20</td><td>沧州/石家庄/保定/秦皇岛等8市</td></tr>
-</tbody>
-</table>
-<div class="analysis-box">
-<div class="ab-title">📊 淘汰鸡分析（8/28数据）</div>
-<div class="ab-grid">
-<div class="ab-col"><h4>今日涨落</h4><ul><li>全国11省均价区间 5.20-6.30 元/斤，高价区江苏、低价区河北，价差1.10元/斤</li><li>数据源：鸡病专业网汇总（红羽粉羽混合口径）</li></ul></div>
-<div class="ab-col"><h4>采货参考</h4><ul><li>价差1.10元（>0.5元/斤有空间）——跨区调运先核算运费再比价</li><li>蛋价走弱时养殖端淘汰量增加，屠企压价空间大，逢低分批接</li></ul></div>
-</div>
-</div>
-</div>
-</div>
-<div class="section">
-<div class="section-header">
-<span class="icon">🥚</span>
-<h2>二、鸡蛋行情（全国主产区）</h2>
-<span class="tag">数据日期 8/28 · 鸡病专业网 · 云端自动更新</span>
-</div>
-<div class="section-body">
-<div class="trend-banner"><strong>主产区均价 5.05-5.10 元/斤弱势盘整 ↓</strong> · 禽报网全国均价5.31 ↓0.06 · 产区稳落为主、上海逆势小涨 · 8月高点5.15（8/17-19，近三年同期最高）已确认回落 · 9/1开学备货第二轮脉冲在即</div>
-<table>
-<thead>
-<tr>
-<th>主产省</th>
-<th>鸡蛋均价（元/斤）</th>
-<th>环比</th>
-<th>当日氛围</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>甘肃</td><td>5.53</td><td class="flat">→</td><td>稳为主</td></tr>
-<tr><td>广东</td><td>5.46</td><td class="down">↓0.21</td><td>稳为主</td></tr>
-<tr><td>北京</td><td>5.45</td><td class="flat">→</td><td>稳为主</td></tr>
-<tr><td>福建</td><td>5.40</td><td class="down">↓0.10</td><td>落为主</td></tr>
-<tr><td>浙江</td><td>5.38</td><td class="down">↓0.09</td><td>落为主</td></tr>
-<tr><td>内蒙古</td><td>5.30</td><td class="flat">→</td><td>稳为主</td></tr>
-<tr><td>黑龙江</td><td>5.28</td><td class="flat">→</td><td>稳为主</td></tr>
-<tr><td>河北</td><td>5.24</td><td class="down">↓0.02</td><td>稳为主</td></tr>
-<tr><td>江苏</td><td>5.22</td><td class="down">↓0.05</td><td>落为主</td></tr>
-<tr><td>吉林</td><td>5.20</td><td class="flat">→</td><td>稳为主</td></tr>
-<tr><td>辽宁</td><td>5.17</td><td class="flat">→</td><td>稳为主</td></tr>
-<tr><td>四川</td><td>5.17</td><td class="down">↓0.05</td><td>稳为主</td></tr>
-<tr><td>天津</td><td>5.16</td><td class="flat">→</td><td>稳为主</td></tr>
-<tr><td>陕西</td><td>5.14</td><td class="down">↓0.14</td><td>落为主</td></tr>
-<tr><td>山西</td><td>5.10</td><td class="down">↓0.14</td><td>落为主</td></tr>
-<tr><td>湖北</td><td>5.10</td><td class="down">↓0.07</td><td>落为主</td></tr>
-<tr><td>山东</td><td>5.09</td><td class="down">↓0.10</td><td>落为主</td></tr>
-<tr><td>安徽</td><td>5.09</td><td class="down">↓0.08</td><td>落为主</td></tr>
-<tr><td>河南</td><td>5.02</td><td class="down">↓0.14</td><td>落为主</td></tr>
-<tr><td>江西</td><td>4.97</td><td class="down">↓0.16</td><td>落为主</td></tr>
-</tbody>
-</table>
-<table style="margin-top:12px">
-<thead>
-<tr>
-<th>主销区</th>
-<th>均价（元/斤）</th>
-<th>环比</th>
-<th>备注</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>北京</td><td>5.30-5.42</td><td class="down">↓</td><td>大洋路230-240（-0.19）、石门240（-0.11）元/44.3斤</td></tr>
-<tr><td>上海</td><td>5.42-5.47</td><td class="up">↑</td><td>粉蛋5.42（+0.02）、浦东5.47（+0.11）逆势小涨</td></tr>
-<tr><td>广州</td><td>5.29-5.62</td><td class="down">↓</td><td>红蛋250-255、粉蛋235-240元/45斤</td></tr>
-<tr><td>东莞</td><td>4.70-5.39</td><td class="down">↓</td><td>粉蛋210-213元/45斤，全国最低</td></tr>
-</tbody>
-</table>
-<div class="analysis-box">
-<div class="ab-title">📊 鸡蛋分析（8/28数据）</div>
-<div class="ab-grid">
-<div class="ab-col"><h4>今日涨落</h4><ul><li>今日主产省蛋价：10省落、0省涨、其余持稳，均价区间 4.97-5.53 元/斤</li><li>数据源：鸡病专业网汇总</li></ul></div>
-<div class="ab-col"><h4>采货参考</h4><ul><li>蛋价与淘汰鸡存在传导：蛋价走弱→养殖端淘汰意愿增强</li><li>蛋价连续上涨→延淘惜售，淘汰鸡供应收紧</li></ul></div>
-</div>
-</div>
-</div>
-</div>
-<div class="section">
-<div class="section-header">
-<span class="icon">🐔</span>
-<h2>三、三黄鸡行情（冻品流通·快大类前端活禽）</h2>
-<span class="tag">口径：快大类前端活禽=冻品三黄鸡成本基准。817肉杂为当日云端抓取（8/28）；快大三黄各省价沿用2026年8月28日 AI校准数据；两者均为快大类，可互相印证。</span>
-</div>
-<div class="section-body">
-<div class="national-summary">
-<div class="summary-card">
-<div class="label">慢速类均价（三黄项/仿土项）</div>
-<div class="value">7.1 ~ 7.8<span class="unit"> 元/斤</span></div>
-<div class="trend"><span class='up'>↑ 中元节续涨</span></div>
-</div>
-<div class="summary-card">
-<div class="label">快速类均价（快大三黄）</div>
-<div class="value">5.0 ~ 5.1<span class="unit"> 元/斤</span></div>
-<div class="trend"><span class='flat'>→ 低位持稳</span></div>
-</div>
-<div class="summary-card">
-<div class="label">项鸡/母鸡区域最大价差</div>
-<div class="value">~4.2<span class="unit"> 元/斤</span></div>
-<div class="trend">娄江草母9.3 vs 快大三黄5.1</div>
-</div>
-</div>
-<div class="trend-banner"><strong>核心信号：</strong>冻品流通三黄鸡前端活禽<strong class="flat">低位持稳</strong>——浙江快大三黄<strong class="flat">5.1元/斤</strong>持平，快大类整体4.0-5.3元/斤；中元节后华南"各品种价格稳定"但客户进货信心不强、销量环比减少</div>
-<table>
-<thead>
-<tr>
-<th>省份/地区</th>
-<th>冻品流通品种（快大类）</th>
-<th>出栏价（元/斤）</th>
-<th>环比</th>
-<th>备注</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>浙江</td><td>快大三黄鸡</td><td>5.1</td><td class="flat">→</td><td>冻品主渠道·全国标杆价（8/26基准）</td></tr>
-<tr><td>江西</td><td>肉杂鸡</td><td>5.0</td><td class="flat">→</td><td>冻品主渠道</td></tr>
-<tr><td>福建</td><td>雪原林鸡</td><td>4.0-4.4</td><td class="flat">→</td><td>快大类低档·冻品原料（8/27确认稳定）</td></tr>
-<tr><td>山东</td><td>黄花公（屠宰）</td><td>4.7-4.9</td><td class="flat">→</td><td>屠宰渠道·走冻品</td></tr>
-<tr><td>河北</td><td>青麻公鸡</td><td>4.8-5.0</td><td class="flat">→</td><td>快大类·冻品原料</td></tr>
-<tr><td>江苏</td><td>青麻公鸡</td><td>5.9-6.1</td><td class="flat">→</td><td>中低档类·部分冻品</td></tr>
-<tr><td>安徽皖北</td><td>黄花公</td><td>5.2-5.3</td><td class="flat">→</td><td>冻品原料</td></tr>
-<tr><td>湖南</td><td>青脚麻公</td><td>4.7-5.3</td><td class="flat">→</td><td>全国低价区·冻品原料（8/27确认稳定）</td></tr>
-<tr><td>湖北</td><td>青脚麻公</td><td>4.9-5.4</td><td class="flat">→</td><td>冻品原料（8/27确认稳定）</td></tr>
-<tr><td>四川</td><td>青脚麻公</td><td>5.9-6.4</td><td class="flat">→</td><td>冻品原料</td></tr>
-<tr><td>广东</td><td>低档快大类</td><td>—（未单列）</td><td class="flat">→</td><td>日报只报中高档，冻品渠道参考浙闽价差</td></tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>地区（817肉杂·快大类）</th>
-<th>规格</th>
-<th>棚前价（元/斤）</th>
-<th>环比</th>
-<th>数据日期</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>河南新乡</td><td>3.2-3.5斤</td><td>3.50-3.60</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>浙江金华</td><td>3.6斤以上</td><td>3.85-3.95</td><td class="down">↓0.05</td><td>数据8/28</td></tr>
-<tr><td>小规格</td><td>1.50-1.70斤</td><td>3.45-3.55</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>河南开封</td><td>3.2-3.5斤</td><td>3.60-3.70</td><td class="down">↓0.05</td><td>数据8/28</td></tr>
-<tr><td>山东聊城</td><td>2.8-3.2斤</td><td>3.50-3.60</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>江苏南通</td><td>3.6斤以上</td><td>3.75-3.85</td><td class="down">↓0.05</td><td>数据8/28</td></tr>
-<tr><td>山东德州</td><td>3.2-3.5斤毛鸡</td><td>3.45-3.55</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>河南濮阳</td><td>3.2-3.5斤</td><td>3.55-3.65</td><td class="down">↓0.05</td><td>数据8/28</td></tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>品项</th>
-<th>冻品批发价（元/斤）</th>
-<th>参考规格</th>
-<th>数据源</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>三黄鸡整鸡（冻品·快大类）</td><td>4.9-5.25（9.8-10.5元/公斤）</td><td>7-10只装</td><td>冻来冻网 8/26（待更新）</td></tr>
-<tr><td>三黄鸡净鸡胗（冻品副产）</td><td>4.9-5.1（9.8-10.2元/公斤）</td><td>—</td><td>冻来冻网 8/26（待更新）</td></tr>
-<tr><td>白条鸡（批发市场综合）</td><td>6.5-14（13-28元/公斤）</td><td>全国主要批发市场</td><td>农业农村部信息中心 8/27</td></tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>参考·活禽鲜销三黄鸡（非冻品主渠道）</th>
-<th>价格（元/斤）</th>
-<th>环比</th>
-<th>备注</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>广东 三黄项 / 三黄阉</td><td>7.6-7.8 / 8.1-8.3</td><td class="flat">→</td><td>活禽鲜销·中元节后转稳</td></tr>
-<tr><td>广西玉林 大三黄项</td><td>7.7-9.1</td><td class="flat">→</td><td>慢速类·不走冻品批发</td></tr>
-<tr><td>福建 矮脚黄项</td><td>7.6-8.0</td><td class="flat">→</td><td>鲜销·高位（8/27确认稳定）</td></tr>
-<tr><td>粤东 矮脚黄项/胡须项</td><td>7.8-8.0 / 8.3-8.5</td><td class="flat">→</td><td>鲜销（8/27确认稳定）</td></tr>
-</tbody>
-</table>
-<div class="analysis-box">
-<div class="ab-title">📊 三黄鸡行情分析 · 今日涨落与采货参考</div>
-<div class="ab-grid">
-<div class="ab-col"><h4>今日涨落</h4><ul><li>8/27农财宝典：全国鸡价"各品种价格稳定"，但中元节后客户进货信心不强、销量环比减少</li><li>快大类底部持稳：湖南青脚麻公4.7-5.3、湖北4.9-5.4均持平，屠宰原料成本稳定</li><li>福建/粤东项鸡高位企稳（矮脚黄项7.6-8.0/7.8-8.5），节后消费回落</li></ul></div>
-<div class="ab-col"><h4>采货参考</h4><ul><li>中元节后华南转淡市，<strong>广系慢速类按订单锁货</strong>，防节后回调</li><li>跨区窗口仍在：天露黑母浙江7.9 vs 湖南6.8-7.6（价差~1元）；矮脚黄母江苏7.7-7.9 vs 湖南6.7-7.3（价差~1元）</li><li>快速类快大三黄5.1低位，<strong>可低位分批布局</strong></li><li>阉鸡类（玉林11-13、广东8.1-8.3）中秋前价格易涨难跌</li></ul></div>
-</div>
-</div>
-</div>
-</div>
-<div class="section">
-<div class="section-header">
-<span class="icon">🐓</span>
-<h2>四、公鸡行情（含阉鸡/黑凤公鸡）</h2>
-<span class="tag">活禽棚前价 · 数据源：鸡病专业网各产区日报 · 云端自动更新（黑凤公鸡等未覆盖项沿用2026年8月28日数据）</span>
-</div>
-<div class="section-body">
-<div class="national-summary">
-<div class="summary-card">
-<div class="label">全国公鸡综合均价范围</div>
-<div class="value">4.7 ~ 8.3<span class="unit"> 元/斤</span></div>
-<div class="trend"><span class='up'>偏强</span> · 中元节拉动</div>
-</div>
-<div class="summary-card">
-<div class="label">代表品种（浙江矮脚黄公）</div>
-<div class="value">7.0<span class="unit"> 元/斤</span></div>
-<div class="trend"><span class='flat'>高位持稳</span> · 近10天+11%</div>
-</div>
-<div class="summary-card">
-<div class="label">黑凤公鸡（河南棚前）</div>
-<div class="value">5.5<span class="unit"> 元/斤</span></div>
-<div class="trend"><span class='flat'>→ 报稳走货畅通</span> · 8月初至今+15%</div>
-</div>
-<div class="summary-card">
-<div class="label">区域最大价差</div>
-<div class="value">~3.5<span class="unit"> 元/斤</span></div>
-<div class="trend">三黄阉8.3 vs 湖南青麻公4.7</div>
-</div>
-</div>
-<div class="trend-banner"><strong>核心信号：</strong>中元节后多地转稳——湖南/湖北矮脚黄公、青脚麻公全线持平（客户进货信心不强）；<strong>黑凤公鸡河南开封5.5元/斤</strong>（8/27基准，今日待更新）；浙江矮脚黄公7.0高位持平；山西麻公（≥3kg）6.60-6.90持平</div>
-<table>
-<thead>
-<tr>
-<th>地区</th>
-<th>品种</th>
-<th>棚前价（元/斤）</th>
-<th>环比</th>
-<th>数据日期</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>山东菏泽</td><td>青脚麻公鸡</td><td>5.40-5.60</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>山东菏泽</td><td>大红公鸡</td><td>8.00-9.00</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>吉林</td><td>黄花公鸡</td><td>6.50-6.80</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>西北(陕甘宁)</td><td>麻鸡成鸡</td><td>6.90</td><td class="up">↑</td><td>数据8/28</td></tr>
-<tr><td>江苏苏州</td><td>优公</td><td>6.60</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>江苏苏州</td><td>黄花公鸡</td><td>6.60</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>四川</td><td>青脚麻鸡</td><td>4.90-5.20</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>四川</td><td>黄花公鸡</td><td>5.20-5.60</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>山东</td><td>麻鸡成鸡</td><td>5.10-5.30</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>山东</td><td>麻鸡成鸡</td><td>5.10-5.30</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>山东</td><td>麻鸡成鸡</td><td>5.10-5.30</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>皖南</td><td>817成鸡</td><td>3.90-4.00</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>皖南</td><td>麻鸡成鸡方面</td><td>5.00-5.10</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>皖北</td><td>817成鸡</td><td>4.00-4.10</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>皖北</td><td>麻鸡成鸡方面</td><td>5.10-5.20</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>山西阳城</td><td>麻鸡成鸡</td><td>7.00-7.20</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>山西运城</td><td>麻鸡成鸡</td><td>7.00-7.20</td><td class="flat">→</td><td>数据8/28</td></tr>
-<tr><td>河南开封</td><td>黑凤公鸡（青脚·5.5斤）</td><td>5.5</td><td class="flat">→ 走货畅通</td><td>主产区·冻品批发6.4-6.8（8/27基准）</td></tr>
-<tr><td>河北邢台</td><td>黑凤公鸡</td><td>5.2-5.3</td><td class="flat">→</td><td>低价区·比开封低0.2-0.3</td></tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>品项</th>
-<th>冻品批发价（元/斤）</th>
-<th>参考规格</th>
-<th>数据源</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>黑凤公鸡（冻品）</td><td>6.4-6.8</td><td>冻品批发</td><td>鑫弘泰报价（待更新）</td></tr>
-<tr><td>579小公鸡（冻品）</td><td>7.15-8.0（14.3-16元/公斤）</td><td>—</td><td>冻来冻网 8/26（待更新）</td></tr>
-<tr><td>黄脚大冠公鸡（冻品）</td><td>6.0-6.7（12-13.4元/公斤）</td><td>—</td><td>冻来冻网 8/26（待更新）</td></tr>
-<tr><td>青脚公鸡（冻品）</td><td>6.4-7.05（12.8-14.1元/公斤）</td><td>—</td><td>冻来冻网 8/26（待更新）</td></tr>
-</tbody>
-</table>
-<div class="analysis-box">
-<div class="ab-title">📊 公鸡分析（各产区标注数据日期）</div>
-<div class="ab-grid">
-<div class="ab-col"><h4>今日涨落</h4><ul><li>今日云端抓取 17 个产区报价，每行标注数据日期</li><li>黑凤公鸡等未覆盖项沿用 2026年8月28日 数据，请核对</li></ul></div>
-<div class="ab-col"><h4>采货参考</h4><ul><li>麻公/黄花公产区价差大，跨区采购先算运费</li><li>中元节/中秋等节前备货常推高价，节后常有回调</li></ul></div>
-</div>
-</div>
-</div>
-</div>
-<div class="section">
-<div class="section-header">
-<span class="icon">🍗</span>
-<h2>五、白羽肉鸡行情</h2>
-<span class="tag">数据日期 8/28 · 鸡病专业网 · 云端自动更新</span>
-</div>
-<div class="section-body">
-<div class="trend-banner"><strong>山东棚前转跌：主流 3.15-3.35 元/斤</strong> · 多地下滑0.03-0.05 · 菏泽3.27-3.37持平 · 社会鸡源主流3.25稳、风险合同3.15跌5分 · 辽宁3.30-3.45坚挺 · 分割品库存持续垒升</div>
-<table>
-<thead>
-<tr>
-<th>山东各市</th>
-<th>棚前收购价（元/斤）</th>
-<th>环比</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>日照</td><td>3.20-3.30</td><td class="down">↓0.05</td></tr>
-<tr><td>滨州</td><td>3.25-3.35</td><td class="flat">→</td></tr>
-<tr><td>临沂</td><td>3.20-3.30</td><td class="down">↓0.05</td></tr>
-<tr><td>威海</td><td>3.25-3.35</td><td class="flat">→</td></tr>
-<tr><td>烟台</td><td>3.15-3.25</td><td class="down">↓0.05</td></tr>
-<tr><td>济宁</td><td>3.20-3.30</td><td class="down">↓0.05</td></tr>
-<tr><td>菏泽</td><td>3.27-3.37</td><td class="flat">→</td></tr>
-<tr><td>东营</td><td>3.22-3.32</td><td class="down">↓0.05</td></tr>
-<tr><td>青岛</td><td>3.20-3.30</td><td class="down">↓0.05</td></tr>
-<tr><td>济南</td><td>3.27-3.37</td><td class="flat">→</td></tr>
-<tr><td>淄博</td><td>3.22-3.32</td><td class="down">↓0.03</td></tr>
-<tr><td>潍坊</td><td>3.20-3.30</td><td class="down">↓0.05</td></tr>
-<tr><td>聊城</td><td>3.27-3.37</td><td class="flat">→</td></tr>
-<tr><td>泰安</td><td>3.20-3.30</td><td class="down">↓0.05</td></tr>
-<tr><td>德州</td><td>3.25-3.35</td><td class="flat">→</td></tr>
-<tr><td>枣庄</td><td>3.20-3.30</td><td class="down">↓0.05</td></tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>省外地区</th>
-<th>棚前收购价（元/斤）</th>
-<th>环比</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>吉林</td><td>3.30-3.40</td><td class="flat">→</td></tr>
-<tr><td>丹东</td><td>3.32-3.42</td><td class="down">↓0.01</td></tr>
-<tr><td>沈阳</td><td>3.35-3.45</td><td class="flat">→</td></tr>
-<tr><td>葫芦岛</td><td>3.30-3.40</td><td class="flat">→</td></tr>
-<tr><td>黑龙江</td><td>3.30-3.40</td><td class="flat">→</td></tr>
-<tr><td>大连</td><td>3.37-3.47</td><td class="down">↓0.01</td></tr>
-<tr><td>阜新</td><td>3.30-3.40</td><td class="flat">→</td></tr>
-<tr><td>抚顺</td><td>3.35-3.45</td><td class="flat">→</td></tr>
-<tr><td>锦州</td><td>3.30-3.40</td><td class="flat">→</td></tr>
-<tr><td>本溪</td><td>3.35-3.45</td><td class="flat">→</td></tr>
-<tr><td>营口</td><td>3.32-3.42</td><td class="down">↓0.01</td></tr>
-<tr><td>朝阳</td><td>3.30-3.40</td><td class="flat">→</td></tr>
-<tr><td>辽阳</td><td>3.35-3.45</td><td class="flat">→</td></tr>
-<tr><td>鞍山</td><td>3.30-3.40</td><td class="flat">→</td></tr>
-<tr><td>盘锦</td><td>3.32-3.42</td><td class="down">↓0.01</td></tr>
-<tr><td>铁岭</td><td>3.35-3.45</td><td class="flat">→</td></tr>
-<tr><td>漯河</td><td>3.19-3.29</td><td class="down">↓0.03</td></tr>
-<tr><td>开封</td><td>3.25-3.35</td><td class="flat">→</td></tr>
-<tr><td>焦作</td><td>3.27-3.37</td><td class="down">↓0.01</td></tr>
-<tr><td>新乡</td><td>3.23-3.33</td><td class="flat">→</td></tr>
-<tr><td>周口</td><td>3.18-3.28</td><td class="down">↓0.03</td></tr>
-<tr><td>陕西</td><td>3.20-3.30</td><td class="flat">→</td></tr>
-<tr><td>商丘</td><td>3.28-3.38</td><td class="down">↓0.02</td></tr>
-<tr><td>鹤壁</td><td>3.26-3.36</td><td class="flat">→</td></tr>
-<tr><td>洛阳</td><td>3.30-3.40</td><td class="down">↓0.02</td></tr>
-<tr><td>唐山</td><td>3.20-3.30</td><td class="flat">→</td></tr>
-<tr><td>邯郸</td><td>3.23-3.33</td><td class="down">↓0.02</td></tr>
-<tr><td>沧州</td><td>3.28-3.38</td><td class="down">↓0.02</td></tr>
-<tr><td>保定</td><td>3.25-3.35</td><td class="down">↓0.01</td></tr>
-<tr><td>北京</td><td>3.30-3.40</td><td class="down">↓0.02</td></tr>
-<tr><td>廊坊</td><td>3.27-3.37</td><td class="down">↓0.01</td></tr>
-<tr><td>天津</td><td>3.22-3.32</td><td class="down">↓0.01</td></tr>
-<tr><td>石家庄</td><td>3.29-3.39</td><td class="flat">→</td></tr>
-<tr><td>蚌埠</td><td>3.25-3.35</td><td class="down">↓0.03</td></tr>
-<tr><td>宿迁</td><td>3.20-3.30</td><td class="down">↓0.05</td></tr>
-<tr><td>淮安</td><td>3.23-3.33</td><td class="down">↓0.04</td></tr>
-<tr><td>徐州</td><td>3.22-3.32</td><td class="down">↓0.04</td></tr>
-</tbody>
-</table>
-<table style="margin-top:12px">
-<thead>
-<tr>
-<th>品类</th>
-<th>价格</th>
-<th>备注</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>鸡苗（山东大厂）</td><td>3.40-3.70 元/羽</td><td class="flat">→</td></tr>
-<tr><td>鸡苗（山东中小厂）</td><td>2.00-3.20 元/羽</td><td class="flat">→</td></tr>
-<tr><td>辽宁毛鸡（进厂）</td><td>3.30-3.45 元/斤</td><td class="flat">→</td></tr>
-<tr><td>河南817（3.2-3.5斤）</td><td>3.50-3.70 元/斤</td><td class="down">↓0.05</td></tr>
-</tbody>
-</table>
-<div class="analysis-box">
-<div class="ab-title">📊 白羽肉鸡分析（8/28数据）</div>
-<div class="ab-grid">
-<div class="ab-col"><h4>今日涨落</h4><ul><li>山东棚前均价 3.27 元/斤（16个市），省外另见下表</li><li>数据源：鸡病专业网</li></ul></div>
-<div class="ab-col"><h4>采货参考</h4><ul><li>棚前价低于3.3元时，屠企冻品成本有优势，可分批建仓</li></ul></div>
-</div>
-</div>
-</div>
-</div>
-<div class="section">
-<div class="section-header">
-<span class="icon">🎯</span>
-<h2>六、综合研判</h2>
-<span class="tag">规则自动生成（无AI研判）· 生成时间 8/28</span>
-</div>
-<div class="section-body">
-<div class="analysis-final">
-<h3>📌 今日区域价差与机会（规则自动计算）</h3>
-<p style="font-size:14px; margin-bottom:12px">淘汰鸡：高价区江苏 6.30元/斤，低价区河北 5.20元/斤，价差1.10元（>0.5元/斤，跨区调运有空间）——可从低价区询价锁单</p>
-<h3>🥚 蛋鸡链传导</h3>
-<p style="font-size:14px; margin-bottom:12px">鸡蛋：主产省均价 5.22 元/斤，蛋价走势影响养殖端淘鸡节奏，连续走弱时淘汰鸡供应将增加</p>
-<h3>🍗 白羽肉鸡操作</h3>
-<p style="font-size:14px; margin-bottom:12px">白羽肉鸡：山东棚前均价 3.27 元/斤，低位区间，可分批建仓</p>
-<h3>⚠️ 数据完整性提示</h3>
-<p style="font-size:14px; margin-bottom:12px">三黄鸡/黑凤公鸡板块：今日云端未抓到新价，沿用 2026年8月28日 数据，重要决策前请人工核实</p>
-</div>
-</div>
-</div>
-<div class="footer">云端自动更新 · 数据源：鸡病专业网 jbzyw.com · 页面生成 2026年8月28日 周五 · 手机页面每2分钟自动检查新版</div>
-</div>
+<header>
+  <div class="hd-top">
+    <div>
+      <div class="hd-title"><span class="ico">🐔</span>禽类采购工作台</div>
+      <div class="hd-date" id="hdDate">加载中…</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="hd-badge" id="hdBadge">…</div>
+      <span class="hd-refresh" id="refreshBtn" title="刷新数据">⟳</span>
+      <span class="hd-search" id="hdSearch">🔍</span>
+    </div>
+  </div>
+  <div class="search-panel" id="searchPanel"><input id="kw" type="search" placeholder="搜省份/品种/价格，如：菏泽、黑凤、三黄…"></div>
+</header>
+<main>
+  <div class="cards" id="cards"></div>
+
+  <div class="card favs" id="favs"></div>
+
+  <nav class="tabs" id="tabs"></nav>
+  <div class="card" id="content"></div>
+
+  <div class="card news" id="news">
+    <div class="card-t"><span>📰 行业资讯 · 鲜活/冻品/市场</span><span id="newsMore" style="font-size:11px;color:var(--sub)">来源：鸡病专业网</span></div>
+    <div class="news-list" id="newsList"></div>
+  </div>
+</main>
+<footer id="foot">禽类采购工作台 · 云端自动更新</footer>
+<div class="toast" id="toast"></div>
+
 <script>
-(function(){
-  var cur = document.title;
-  function check(){
-    fetch('index.html?_t=' + Date.now(), {cache: 'no-store'})
-      .then(function(r){ return r.text(); })
-      .then(function(t){
-        var m = t.match(/<title>([^<]*)<\/title>/);
-        if (m && m[1] !== cur) { location.reload(); }
-      })
-      .catch(function(){});
+var SNAPSHOT = {"meta":{"date_cn":"2026年8月28日","date_iso":"2026-08-28","weekday":"周五","subtitle":"覆盖淘汰鸡 · 鸡蛋 · 三黄鸡 · 公鸡（含黑凤公鸡） · 白羽肉鸡"},"trend_cards":[{"emoji":"🐔","name":"老母鸡","price":"5.95","unit":" 元/斤","chart":{"y_top":"6.4","y_bottom":"5.8","dates":["8/18","8/19","8/20","8/26","8/27","8/28"],"series":[{"values":[6.19,6.16,6.11,6.13,6.05,5.82],"style":"solid","show_points":true}]},"note":"全国淘汰鸡均价 5.82 元/斤（8/28，11省）。云端自动更新，数据源：鸡病专业网。","wt_title":"近10日数据点（全国均价，众合/肉类食品网）"},{"emoji":"🐓","name":"三黄鸡","price":"7.6~7.8","unit":" 元/斤","chart":{"y_top":"7.9","y_bottom":"7.0","dates":["8/24","8/25","8/26","8/27","8/28"],"series":[{"values":[5.1,5.1,5.1,5.1,5.1],"style":"solid","show_points":true,"label":"浙江快大三黄（冻品口径）：5.1持平"},{"values":[7.6,7.7,7.7,7.7,7.7],"style":"dash","show_points":false,"label":"三黄项鲜销参考：7.7持平"}]},"note":"冻品流通口径：浙江快大三黄5.1元/斤持平，快大类整体4.0-5.3元/斤低位持稳，屠宰原料成本稳定；虚线为活禽鲜销三黄项（7.6-7.8）不同市场，勿混价。","wt_title":"近10日数据点（红=广东三黄项，绿=浙江快大三黄）"},{"emoji":"🐓","name":"公鸡","price":"7.0","unit":" 元/斤","chart":{"y_top":"7.2","y_bottom":"6.0","dates":["8/21","8/24","8/25","8/27","8/28"],"series":[{"values":[6.8,7.0,7.0,7.0,7.0],"style":"solid","show_points":true}]},"note":"全国公鸡区间5.2-8.3元/斤 · 中元节后多地转稳（客户进货信心不强）· 山东麻公涨后企稳、山西麻公6.6-6.9高位","wt_title":"近10日数据点（浙江矮脚黄公鸡，华东代表）"},{"name":"白羽肉鸡","price":"3.25","unit":"元/斤","note":"日照棚前 · 低位可分批建仓","chart":{"dates":["08/28"],"series":[{"name":"棚前均价","values":["3.25"]}]}}],"sections":[{"icon":"📉","title":"一、淘汰鸡行情（全国各省）","tag":"数据日期 8/28 · 鸡病专业网 · 云端自动更新","banner":"<strong>全国均价续跌至 5.95 元/斤左右 ↓约0.1</strong>（禽报网样本口径5.72 ↓0.12）· 多省红鸡屠宰价下调0.1-0.3 · 河北粉鸡屠宰压至5.00-5.10全国最低 · 周出栏量环比+8.86%、集中淘汰持续","tables":[{"headers":["省份","淘汰鸡价（元/斤）","环比","覆盖城市（同价）"],"rows":[["江苏","6.30",{"t":"↓0.10","dir":"down"},"淮安淮阴/昆山/连云港灌云/南京等17市"],["河南","6.00",{"t":"↓0.20","dir":"down"},"安阳纸箱/新乡/濮阳/焦作等17市"],["山东","6.00",{"t":"↓0.10","dir":"down"},"滨州/德州/菏泽/济南等13市"],["安徽","6.00",{"t":"→","dir":"flat"},"巢湖/阜阳/阜南/淮北等11市"],["黑龙江","5.90",{"t":"↓0.10","dir":"down"},"海林/牡丹江/双鸭山/伊春等6市"],["吉林","5.90",{"t":"↓0.10","dir":"down"},"四平/吉林/辽源"],["内蒙古","5.90",{"t":"↓0.10","dir":"down"},"赤峰/呼和浩特"],["陕西","5.70",{"t":"↓0.20","dir":"down"},"宝鸡出场价/商洛散筐价"],["山西","5.70",{"t":"↓0.20","dir":"down"},"长治/大同/曲沃/文水等10市"],["辽宁","5.45",{"t":"↓0.07","dir":"down"},"大连庄河/锦州纸箱/朝阳"],["河北","5.20",{"t":"↓0.20","dir":"down"},"沧州/石家庄/保定/秦皇岛等8市"]],"cap":""}],"analysis":{"title":"📊 淘汰鸡分析（8/28数据）","up":["全国11省均价区间 5.20-6.30 元/斤，高价区江苏、低价区河北，价差1.10元/斤","数据源：鸡病专业网汇总（红羽粉羽混合口径）"],"ref":["价差1.10元（>0.5元/斤有空间）——跨区调运先核算运费再比价","蛋价走弱时养殖端淘汰量增加，屠企压价空间大，逢低分批接"]},"tab":"淘汰鸡"},{"icon":"🥚","title":"二、鸡蛋行情（全国主产区）","tag":"数据日期 8/28 · 鸡病专业网 · 云端自动更新","banner":"<strong>主产区均价 5.05-5.10 元/斤弱势盘整 ↓</strong> · 禽报网全国均价5.31 ↓0.06 · 产区稳落为主、上海逆势小涨 · 8月高点5.15（8/17-19，近三年同期最高）已确认回落 · 9/1开学备货第二轮脉冲在即","tables":[{"headers":["主产省","鸡蛋均价（元/斤）","环比","当日氛围"],"rows":[["甘肃","5.53",{"t":"→","dir":"flat"},"稳为主"],["广东","5.46",{"t":"↓0.21","dir":"down"},"稳为主"],["北京","5.45",{"t":"→","dir":"flat"},"稳为主"],["福建","5.40",{"t":"↓0.10","dir":"down"},"落为主"],["浙江","5.38",{"t":"↓0.09","dir":"down"},"落为主"],["内蒙古","5.30",{"t":"→","dir":"flat"},"稳为主"],["黑龙江","5.28",{"t":"→","dir":"flat"},"稳为主"],["河北","5.24",{"t":"↓0.02","dir":"down"},"稳为主"],["江苏","5.22",{"t":"↓0.05","dir":"down"},"落为主"],["吉林","5.20",{"t":"→","dir":"flat"},"稳为主"],["辽宁","5.17",{"t":"→","dir":"flat"},"稳为主"],["四川","5.17",{"t":"↓0.05","dir":"down"},"稳为主"],["天津","5.16",{"t":"→","dir":"flat"},"稳为主"],["陕西","5.14",{"t":"↓0.14","dir":"down"},"落为主"],["山西","5.10",{"t":"↓0.14","dir":"down"},"落为主"],["湖北","5.10",{"t":"↓0.07","dir":"down"},"落为主"],["山东","5.09",{"t":"↓0.10","dir":"down"},"落为主"],["安徽","5.09",{"t":"↓0.08","dir":"down"},"落为主"],["河南","5.02",{"t":"↓0.14","dir":"down"},"落为主"],["江西","4.97",{"t":"↓0.16","dir":"down"},"落为主"]],"cap":""},{"style":"margin-top:12px","headers":["主销区","均价（元/斤）","环比","备注"],"rows":[["北京","5.30-5.42",{"t":"↓","dir":"down"},"大洋路230-240（-0.19）、石门240（-0.11）元/44.3斤"],["上海","5.42-5.47",{"t":"↑","dir":"up"},"粉蛋5.42（+0.02）、浦东5.47（+0.11）逆势小涨"],["广州","5.29-5.62",{"t":"↓","dir":"down"},"红蛋250-255、粉蛋235-240元/45斤"],["东莞","4.70-5.39",{"t":"↓","dir":"down"},"粉蛋210-213元/45斤，全国最低"]],"cap":""}],"analysis":{"title":"📊 鸡蛋分析（8/28数据）","up":["今日主产省蛋价：10省落、0省涨、其余持稳，均价区间 4.97-5.53 元/斤","数据源：鸡病专业网汇总"],"ref":["蛋价与淘汰鸡存在传导：蛋价走弱→养殖端淘汰意愿增强","蛋价连续上涨→延淘惜售，淘汰鸡供应收紧"]},"tab":"鸡蛋"},{"icon":"🐔","title":"三、三黄鸡行情（冻品流通·快大类前端活禽）","tag":"口径：快大类前端活禽=冻品三黄鸡成本基准。817肉杂为当日云端抓取（8/28）；快大三黄各省价沿用2026年8月28日 AI校准数据；两者均为快大类，可互相印证。","summary":[{"label":"慢速类均价（三黄项/仿土项）","value":"7.1 ~ 7.8","unit":" 元/斤","trend":"<span class='up'>↑ 中元节续涨</span>"},{"label":"快速类均价（快大三黄）","value":"5.0 ~ 5.1","unit":" 元/斤","trend":"<span class='flat'>→ 低位持稳</span>"},{"label":"项鸡/母鸡区域最大价差","value":"~4.2","unit":" 元/斤","trend":"娄江草母9.3 vs 快大三黄5.1"}],"banner":"<strong>核心信号：</strong>冻品流通三黄鸡前端活禽<strong class=\"flat\">低位持稳</strong>——浙江快大三黄<strong class=\"flat\">5.1元/斤</strong>持平，快大类整体4.0-5.3元/斤；中元节后华南\"各品种价格稳定\"但客户进货信心不强、销量环比减少","analysis":{"title":"📊 三黄鸡行情分析 · 今日涨落与采货参考","up":["8/27农财宝典：全国鸡价\"各品种价格稳定\"，但中元节后客户进货信心不强、销量环比减少","快大类底部持稳：湖南青脚麻公4.7-5.3、湖北4.9-5.4均持平，屠宰原料成本稳定","福建/粤东项鸡高位企稳（矮脚黄项7.6-8.0/7.8-8.5），节后消费回落"],"ref":["中元节后华南转淡市，<strong>广系慢速类按订单锁货</strong>，防节后回调","跨区窗口仍在：天露黑母浙江7.9 vs 湖南6.8-7.6（价差~1元）；矮脚黄母江苏7.7-7.9 vs 湖南6.7-7.3（价差~1元）","快速类快大三黄5.1低位，<strong>可低位分批布局</strong>","阉鸡类（玉林11-13、广东8.1-8.3）中秋前价格易涨难跌"]},"tables":[{"headers":["省份/地区","冻品流通品种（快大类）","出栏价（元/斤）","环比","备注"],"rows":[["浙江","快大三黄鸡","5.1",{"t":"→","dir":"flat"},"冻品主渠道·全国标杆价（8/26基准）"],["江西","肉杂鸡","5.0",{"t":"→","dir":"flat"},"冻品主渠道"],["福建","雪原林鸡","4.0-4.4",{"t":"→","dir":"flat"},"快大类低档·冻品原料（8/27确认稳定）"],["山东","黄花公（屠宰）","4.7-4.9",{"t":"→","dir":"flat"},"屠宰渠道·走冻品"],["河北","青麻公鸡","4.8-5.0",{"t":"→","dir":"flat"},"快大类·冻品原料"],["江苏","青麻公鸡","5.9-6.1",{"t":"→","dir":"flat"},"中低档类·部分冻品"],["安徽皖北","黄花公","5.2-5.3",{"t":"→","dir":"flat"},"冻品原料"],["湖南","青脚麻公","4.7-5.3",{"t":"→","dir":"flat"},"全国低价区·冻品原料（8/27确认稳定）"],["湖北","青脚麻公","4.9-5.4",{"t":"→","dir":"flat"},"冻品原料（8/27确认稳定）"],["四川","青脚麻公","5.9-6.4",{"t":"→","dir":"flat"},"冻品原料"],["广东","低档快大类","—（未单列）",{"t":"→","dir":"flat"},"日报只报中高档，冻品渠道参考浙闽价差"]],"cap":""},{"headers":["地区（817肉杂·快大类）","规格","棚前价（元/斤）","环比","数据日期"],"rows":[["河南新乡","3.2-3.5斤","3.50-3.60",{"t":"→","dir":"flat"},"数据8/28"],["浙江金华","3.6斤以上","3.85-3.95",{"t":"↓0.05","dir":"down"},"数据8/28"],["小规格","1.50-1.70斤","3.45-3.55",{"t":"→","dir":"flat"},"数据8/28"],["河南开封","3.2-3.5斤","3.60-3.70",{"t":"↓0.05","dir":"down"},"数据8/28"],["山东聊城","2.8-3.2斤","3.50-3.60",{"t":"→","dir":"flat"},"数据8/28"],["江苏南通","3.6斤以上","3.75-3.85",{"t":"↓0.05","dir":"down"},"数据8/28"],["山东德州","3.2-3.5斤毛鸡","3.45-3.55",{"t":"→","dir":"flat"},"数据8/28"],["河南濮阳","3.2-3.5斤","3.55-3.65",{"t":"↓0.05","dir":"down"},"数据8/28"]],"cap":""},{"headers":["品项","冻品批发价（元/斤）","参考规格","数据源"],"rows":[["三黄鸡整鸡（冻品·快大类）","4.9-5.25（9.8-10.5元/公斤）","7-10只装","冻来冻网 8/26（待更新）"],["三黄鸡净鸡胗（冻品副产）","4.9-5.1（9.8-10.2元/公斤）","—","冻来冻网 8/26（待更新）"],["白条鸡（批发市场综合）","6.5-14（13-28元/公斤）","全国主要批发市场","农业农村部信息中心 8/27"]],"cap":""},{"headers":["参考·活禽鲜销三黄鸡（非冻品主渠道）","价格（元/斤）","环比","备注"],"rows":[["广东 三黄项 / 三黄阉","7.6-7.8 / 8.1-8.3",{"t":"→","dir":"flat"},"活禽鲜销·中元节后转稳"],["广西玉林 大三黄项","7.7-9.1",{"t":"→","dir":"flat"},"慢速类·不走冻品批发"],["福建 矮脚黄项","7.6-8.0",{"t":"→","dir":"flat"},"鲜销·高位（8/27确认稳定）"],["粤东 矮脚黄项/胡须项","7.8-8.0 / 8.3-8.5",{"t":"→","dir":"flat"},"鲜销（8/27确认稳定）"]],"cap":""}],"tab":"三黄鸡"},{"icon":"🐓","title":"四、公鸡行情（含阉鸡/黑凤公鸡）","tag":"活禽棚前价 · 数据源：鸡病专业网各产区日报 · 云端自动更新（黑凤公鸡等未覆盖项沿用2026年8月28日数据）","summary":[{"label":"全国公鸡综合均价范围","value":"4.7 ~ 8.3","unit":" 元/斤","trend":"<span class='up'>偏强</span> · 中元节拉动"},{"label":"代表品种（浙江矮脚黄公）","value":"7.0","unit":" 元/斤","trend":"<span class='flat'>高位持稳</span> · 近10天+11%"},{"label":"黑凤公鸡（河南棚前）","value":"5.5","unit":" 元/斤","trend":"<span class='flat'>→ 报稳走货畅通</span> · 8月初至今+15%"},{"label":"区域最大价差","value":"~3.5","unit":" 元/斤","trend":"三黄阉8.3 vs 湖南青麻公4.7"}],"banner":"<strong>核心信号：</strong>中元节后多地转稳——湖南/湖北矮脚黄公、青脚麻公全线持平（客户进货信心不强）；<strong>黑凤公鸡河南开封5.5元/斤</strong>（8/27基准，今日待更新）；浙江矮脚黄公7.0高位持平；山西麻公（≥3kg）6.60-6.90持平","analysis":{"title":"📊 公鸡分析（各产区标注数据日期）","up":["今日云端抓取 17 个产区报价，每行标注数据日期","黑凤公鸡等未覆盖项沿用 2026年8月28日 数据，请核对"],"ref":["麻公/黄花公产区价差大，跨区采购先算运费","中元节/中秋等节前备货常推高价，节后常有回调"]},"tables":[{"headers":["地区","品种","棚前价（元/斤）","环比","数据日期"],"rows":[["山东菏泽","青脚麻公鸡","5.40-5.60",{"t":"→","dir":"flat"},"数据8/28"],["山东菏泽","大红公鸡","8.00-9.00",{"t":"→","dir":"flat"},"数据8/28"],["吉林","黄花公鸡","6.50-6.80",{"t":"→","dir":"flat"},"数据8/28"],["西北(陕甘宁)","麻鸡成鸡","6.90",{"t":"↑","dir":"up"},"数据8/28"],["江苏苏州","优公","6.60",{"t":"→","dir":"flat"},"数据8/28"],["江苏苏州","黄花公鸡","6.60",{"t":"→","dir":"flat"},"数据8/28"],["四川","青脚麻鸡","4.90-5.20",{"t":"→","dir":"flat"},"数据8/28"],["四川","黄花公鸡","5.20-5.60",{"t":"→","dir":"flat"},"数据8/28"],["山东","麻鸡成鸡","5.10-5.30",{"t":"→","dir":"flat"},"数据8/28"],["山东","麻鸡成鸡","5.10-5.30",{"t":"→","dir":"flat"},"数据8/28"],["山东","麻鸡成鸡","5.10-5.30",{"t":"→","dir":"flat"},"数据8/28"],["皖南","817成鸡","3.90-4.00",{"t":"→","dir":"flat"},"数据8/28"],["皖南","麻鸡成鸡方面","5.00-5.10",{"t":"→","dir":"flat"},"数据8/28"],["皖北","817成鸡","4.00-4.10",{"t":"→","dir":"flat"},"数据8/28"],["皖北","麻鸡成鸡方面","5.10-5.20",{"t":"→","dir":"flat"},"数据8/28"],["山西阳城","麻鸡成鸡","7.00-7.20",{"t":"→","dir":"flat"},"数据8/28"],["山西运城","麻鸡成鸡","7.00-7.20",{"t":"→","dir":"flat"},"数据8/28"],["河南开封","黑凤公鸡（青脚·5.5斤）","5.5",{"t":"→ 走货畅通","dir":"flat"},"主产区·冻品批发6.4-6.8（8/27基准）"],["河北邢台","黑凤公鸡","5.2-5.3",{"t":"→","dir":"flat"},"低价区·比开封低0.2-0.3"]],"cap":""},{"headers":["品项","冻品批发价（元/斤）","参考规格","数据源"],"rows":[["黑凤公鸡（冻品）","6.4-6.8","冻品批发","鑫弘泰报价（待更新）"],["579小公鸡（冻品）","7.15-8.0（14.3-16元/公斤）","—","冻来冻网 8/26（待更新）"],["黄脚大冠公鸡（冻品）","6.0-6.7（12-13.4元/公斤）","—","冻来冻网 8/26（待更新）"],["青脚公鸡（冻品）","6.4-7.05（12.8-14.1元/公斤）","—","冻来冻网 8/26（待更新）"]],"cap":""}],"tab":"公鸡"},{"icon":"🍗","title":"五、白羽肉鸡行情","tag":"数据日期 8/28 · 鸡病专业网 · 云端自动更新","banner":"<strong>山东棚前转跌：主流 3.15-3.35 元/斤</strong> · 多地下滑0.03-0.05 · 菏泽3.27-3.37持平 · 社会鸡源主流3.25稳、风险合同3.15跌5分 · 辽宁3.30-3.45坚挺 · 分割品库存持续垒升","tables":[{"headers":["山东各市","棚前收购价（元/斤）","环比"],"rows":[["日照","3.20-3.30",{"t":"↓0.05","dir":"down"}],["滨州","3.25-3.35",{"t":"→","dir":"flat"}],["临沂","3.20-3.30",{"t":"↓0.05","dir":"down"}],["威海","3.25-3.35",{"t":"→","dir":"flat"}],["烟台","3.15-3.25",{"t":"↓0.05","dir":"down"}],["济宁","3.20-3.30",{"t":"↓0.05","dir":"down"}],["菏泽","3.27-3.37",{"t":"→","dir":"flat"}],["东营","3.22-3.32",{"t":"↓0.05","dir":"down"}],["青岛","3.20-3.30",{"t":"↓0.05","dir":"down"}],["济南","3.27-3.37",{"t":"→","dir":"flat"}],["淄博","3.22-3.32",{"t":"↓0.03","dir":"down"}],["潍坊","3.20-3.30",{"t":"↓0.05","dir":"down"}],["聊城","3.27-3.37",{"t":"→","dir":"flat"}],["泰安","3.20-3.30",{"t":"↓0.05","dir":"down"}],["德州","3.25-3.35",{"t":"→","dir":"flat"}],["枣庄","3.20-3.30",{"t":"↓0.05","dir":"down"}]],"cap":""},{"headers":["省外地区","棚前收购价（元/斤）","环比"],"rows":[["吉林","3.30-3.40",{"t":"→","dir":"flat"}],["丹东","3.32-3.42",{"t":"↓0.01","dir":"down"}],["沈阳","3.35-3.45",{"t":"→","dir":"flat"}],["葫芦岛","3.30-3.40",{"t":"→","dir":"flat"}],["黑龙江","3.30-3.40",{"t":"→","dir":"flat"}],["大连","3.37-3.47",{"t":"↓0.01","dir":"down"}],["阜新","3.30-3.40",{"t":"→","dir":"flat"}],["抚顺","3.35-3.45",{"t":"→","dir":"flat"}],["锦州","3.30-3.40",{"t":"→","dir":"flat"}],["本溪","3.35-3.45",{"t":"→","dir":"flat"}],["营口","3.32-3.42",{"t":"↓0.01","dir":"down"}],["朝阳","3.30-3.40",{"t":"→","dir":"flat"}],["辽阳","3.35-3.45",{"t":"→","dir":"flat"}],["鞍山","3.30-3.40",{"t":"→","dir":"flat"}],["盘锦","3.32-3.42",{"t":"↓0.01","dir":"down"}],["铁岭","3.35-3.45",{"t":"→","dir":"flat"}],["漯河","3.19-3.29",{"t":"↓0.03","dir":"down"}],["开封","3.25-3.35",{"t":"→","dir":"flat"}],["焦作","3.27-3.37",{"t":"↓0.01","dir":"down"}],["新乡","3.23-3.33",{"t":"→","dir":"flat"}],["周口","3.18-3.28",{"t":"↓0.03","dir":"down"}],["陕西","3.20-3.30",{"t":"→","dir":"flat"}],["商丘","3.28-3.38",{"t":"↓0.02","dir":"down"}],["鹤壁","3.26-3.36",{"t":"→","dir":"flat"}],["洛阳","3.30-3.40",{"t":"↓0.02","dir":"down"}],["唐山","3.20-3.30",{"t":"→","dir":"flat"}],["邯郸","3.23-3.33",{"t":"↓0.02","dir":"down"}],["沧州","3.28-3.38",{"t":"↓0.02","dir":"down"}],["保定","3.25-3.35",{"t":"↓0.01","dir":"down"}],["北京","3.30-3.40",{"t":"↓0.02","dir":"down"}],["廊坊","3.27-3.37",{"t":"↓0.01","dir":"down"}],["天津","3.22-3.32",{"t":"↓0.01","dir":"down"}],["石家庄","3.29-3.39",{"t":"→","dir":"flat"}],["蚌埠","3.25-3.35",{"t":"↓0.03","dir":"down"}],["宿迁","3.20-3.30",{"t":"↓0.05","dir":"down"}],["淮安","3.23-3.33",{"t":"↓0.04","dir":"down"}],["徐州","3.22-3.32",{"t":"↓0.04","dir":"down"}]],"cap":""},{"style":"margin-top:12px","headers":["品类","价格","备注"],"rows":[["鸡苗（山东大厂）","3.40-3.70 元/羽",{"t":"→","dir":"flat"}],["鸡苗（山东中小厂）","2.00-3.20 元/羽",{"t":"→","dir":"flat"}],["辽宁毛鸡（进厂）","3.30-3.45 元/斤",{"t":"→","dir":"flat"}],["河南817（3.2-3.5斤）","3.50-3.70 元/斤",{"t":"↓0.05","dir":"down"}]],"cap":""}],"analysis":{"title":"📊 白羽肉鸡分析（8/28数据）","up":["山东棚前均价 3.27 元/斤（16个市），省外另见下表","数据源：鸡病专业网"],"ref":["棚前价低于3.3元时，屠企冻品成本有优势，可分批建仓"]},"tab":"白羽"},{"icon":"🎯","title":"六、综合研判","type":"final","blocks":[{"h":"📌 今日区域价差与机会（规则自动计算）","p":"淘汰鸡：高价区江苏 6.30元/斤，低价区河北 5.20元/斤，价差1.10元（>0.5元/斤，跨区调运有空间）——可从低价区询价锁单"},{"h":"🥚 蛋鸡链传导","p":"鸡蛋：主产省均价 5.22 元/斤，蛋价走势影响养殖端淘鸡节奏，连续走弱时淘汰鸡供应将增加"},{"h":"🍗 白羽肉鸡操作","p":"白羽肉鸡：山东棚前均价 3.27 元/斤，低位区间，可分批建仓"},{"h":"⚠️ 数据完整性提示","p":"三黄鸡/黑凤公鸡板块：今日云端未抓到新价，沿用 2026年8月28日 数据，重要决策前请人工核实"}],"tag":"规则自动生成（无AI研判）· 生成时间 8/28","tab":"研判"}],"footer":"云端自动更新 · 数据源：鸡病专业网 jbzyw.com · 页面生成 2026年8月28日 周五 · 手机页面每2分钟自动检查新版","news":[{"title":"2026年8月27日国内饲料原料行情午间汇总","url":"https://www.jbzyw.com/view/515920","date":"8/27","src":"鸡病专业网"},{"title":"2026年8月26日国内饲料原料行情午间汇总","url":"https://www.jbzyw.com/view/515892","date":"8/26","src":"鸡病专业网"},{"title":"2026年8月25日国内饲料原料行情午间汇总","url":"https://www.jbzyw.com/view/515732","date":"8/25","src":"鸡病专业网"},{"title":"2026年8月24日国内饲料原料行情午间汇总","url":"https://www.jbzyw.com/view/515620","date":"8/24","src":"鸡病专业网"},{"title":"2026年8月21日国内饲料原料行情午间汇总","url":"https://www.jbzyw.com/view/515263","date":"8/21","src":"鸡病专业网"},{"title":"2026年8月20日国内饲料原料行情午间汇总","url":"https://www.jbzyw.com/view/515058","date":"8/20","src":"鸡病专业网"}]};
+
+var STATE = {
+  data: null, src: 'snap', tab: 0,
+  favs: {}, kw: ''
+};
+try { STATE.favs = JSON.parse(localStorage.getItem('qx_wb_favs') || '{}'); } catch(e){}
+var SECTIONS = [
+  {name:'淘汰鸡'}, {name:'鸡蛋'}, {name:'三黄鸡'},
+  {name:'公鸡'}, {name:'白羽'}, {name:'研判'}
+];
+var $ = function(id){ return document.getElementById(id); };
+var esc = function(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+
+function cellHtml(c){
+  if (c === null || c === undefined) return '<td></td>';
+  if (typeof c === 'object') {
+    var cls = c.dir === 'up' ? 'c-up' : (c.dir === 'down' ? 'c-down' : 'c-flat');
+    return '<td class="' + cls + '">' + esc(c.t) + '</td>';
   }
-  setInterval(check, 120000);
+  return '<td>' + esc(c) + '</td>';
+}
+function rowKey(si, ti, ri){ return si + '-' + ti + '-' + ri; }
+function rowText(row){ return row.map(function(c){ return typeof c === 'object' ? c.t : c; }).join(' '); }
+
+function setBadge(){
+  var b = $('hdBadge');
+  if (STATE.src === 'live'){ b.className = 'hd-badge live'; b.textContent = '● 实时'; }
+  else { b.className = 'hd-badge snap'; b.textContent = '● 缓存'; }
+}
+function toast(msg){
+  var t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 2200);
+}
+
+/* ---------- 趋势标签：昨日 / 3天 / 7天 ---------- */
+function trendTag(vals, days, label){
+  if (!vals || vals.length < 2) return '<span class="tag flat">' + label + ' —</span>';
+  var n = Math.min(days, vals.length);
+  var start = parseFloat(vals[vals.length - n]);
+  var end = parseFloat(vals[vals.length - 1]);
+  if (isNaN(start) || isNaN(end)) return '<span class="tag flat">' + label + ' —</span>';
+  var diff = end - start, TH = 0.001;
+  if (Math.abs(diff) < TH) return '<span class="tag flat">' + label + ' → 持平</span>';
+  var cls = diff > 0 ? 'up' : 'down';
+  var arrow = diff > 0 ? '↑' : '↓';
+  var abs = Math.abs(diff).toFixed(2);
+  return '<span class="tag ' + cls + '">' + label + arrow + abs + '</span>';
+}
+function trendTags(vals){
+  return trendTag(vals, 2, '昨日') + trendTag(vals, 3, '3天') + trendTag(vals, 7, '7天');
+}
+
+/* ---------- 迷你折线 ---------- */
+function sparkline(dates, series){
+  var W = 100, H = 36, P = 4;
+  var all = [];
+  series.forEach(function(s){ (s.values||[]).forEach(function(v){ var n = parseFloat(v); if(!isNaN(n)) all.push(n); }); });
+  if (all.length < 2) return '<svg viewBox="0 0 ' + W + ' ' + H + '"><text x="8" y="20" font-size="8" fill="#9aa5a0">待积累</text></svg>';
+  var mn = Math.min.apply(null, all), mx = Math.max.apply(null, all);
+  if (mn === mx){ mn -= 0.1; mx += 0.1; }
+  var px = function(i){ return P + i * (W - 2*P) / (dates.length - 1 || 1); };
+  var py = function(v){ return H - P - (v - mn) * (H - 2*P) / (mx - mn); };
+  var last = series.length - 1;
+  var parts = series.map(function(s, si){
+    var pts = (s.values||[]).map(function(v, i){ var n = parseFloat(v); return isNaN(n) ? null : px(i) + ',' + py(n); })
+      .filter(function(p){ return p; });
+    var dash = (si === last && series.length > 1) ? ' stroke-dasharray="3 3"' : '';
+    return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' +
+      (si === last ? '#d63b3b' : '#2f5d3a') + '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"' + dash + '/>';
+  }).join('');
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '">' + parts + '</svg>';
+}
+
+/* ---------- 本板块研判（综合研判分发 + 板块数据自动生成） ---------- */
+function sectionJudge(d, si){
+  var s = d.sections[si];
+  var finalSec = (d.sections || []).filter(function(x){ return x.type === 'final'; })[0];
+  var blocks = (finalSec && finalSec.blocks) || [];
+  var title = (s.tab || s.title || '').replace(/^[一二三四五六]、/, '');
+  var titleShort = title.replace(/（.*?）/g, '').replace(/行情/, '');
+  var matched = [];
+
+  // 按板块关键词匹配综合研判 blocks
+  var keyMap = [
+    {re:/淘汰鸡|价差|区域/, sec:'淘汰鸡'},
+    {re:/鸡蛋|蛋鸡|蛋价/, sec:'鸡蛋'},
+    {re:/三黄鸡/, sec:'三黄鸡'},
+    {re:/公鸡|黑凤|阉鸡/, sec:'公鸡'},
+    {re:/白羽肉鸡|白羽/, sec:'白羽'}
+  ];
+  var secName = '';
+  keyMap.forEach(function(k){ if(k.re.test(title)) secName = k.sec; });
+
+  blocks.forEach(function(b){
+    var h = (b.h || '').toLowerCase();
+    if (!secName) return;
+    if (secName === '淘汰鸡' && /价差|淘汰鸡/.test(h)) matched.push(b);
+    if (secName === '鸡蛋' && /蛋鸡|鸡蛋/.test(h)) matched.push(b);
+    if (secName === '三黄鸡' && /三黄鸡/.test(h)) matched.push(b);
+    if (secName === '公鸡' && /公鸡|黑凤/.test(h)) matched.push(b);
+    if (secName === '白羽' && /白羽/.test(h)) matched.push(b);
+  });
+  // 数据完整性提示单独提取，作为板块底部小字提示
+  var notice = null;
+  blocks.forEach(function(b){ if (/数据完整性/.test(b.h || '')) notice = b; });
+
+  // 由本板块数据自动生成研判：主表报价区间 + 涨跌 + 冻品批发参考
+  var st = {up:0, down:0, flat:0, hi:null, lo:null, hiName:'', loName:''};
+  // 涨跌统计：本板块全部表格
+  (s.tables || []).forEach(function(t){
+    (t.rows || []).forEach(function(row){
+      row.forEach(function(c){
+        if (c && typeof c === 'object' && c.dir){
+          if (c.dir === 'up') st.up++; else if (c.dir === 'down') st.down++; else st.flat++;
+        }
+      });
+    });
+  });
+  // 报价区间：仅取第一张主表，且列头必须含"元/斤"（排除环比/覆盖城市/规格等）
+  var t0 = (s.tables || [])[0];
+  if (t0){
+    var hs = t0.headers || [];
+    (t0.rows || []).forEach(function(row){
+      var name = String(row[0] || '');
+      if (hs[1] && /品种|品类/.test(hs[1]) && row[1]){
+        var v1 = (typeof row[1] === 'object' ? row[1].t : row[1]) || '';
+        name += '·' + String(v1);
+      }
+      hs.forEach(function(h, ci){
+        if (!h || h.indexOf('元/斤') < 0) return;
+        var c = row[ci]; if (c == null) return;
+        var txt = (typeof c === 'object' ? String(c.t || '') : String(c)).replace(/（[^）]*）|\([^)]*\)/g, ' ');
+        (txt.match(/\d+(?:\.\d+)?/g) || []).forEach(function(x){
+          var v = parseFloat(x);
+          if (v > 0 && v < 50){
+            if (st.hi == null || v > st.hi){ st.hi = v; st.hiName = name; }
+            if (st.lo == null || v < st.lo){ st.lo = v; st.loName = name; }
+          }
+        });
+      });
+    });
+  }
+  // 冻品批发参考行：三黄鸡/公鸡板块的冻品批发价表
+  var fdTxt = '';
+  (s.tables || []).forEach(function(t){
+    if ((t.headers || []).join('').indexOf('冻品批发价') < 0) return;
+    var parts = [];
+    (t.rows || []).forEach(function(row){
+      var nm = String(row[0] || '').replace(/（[^）]*）/g, '');
+      var pv = '';
+      (t.headers || []).forEach(function(h, ci){
+        if (h && h.indexOf('元/斤') >= 0 && !pv && row[ci] != null){
+          pv = (typeof row[ci] === 'object' ? String(row[ci].t || '') : String(row[ci])).replace(/（[^）]*）/g, '');
+        }
+      });
+      if (nm && pv) parts.push(nm + ' ' + pv);
+    });
+    if (parts.length) fdTxt = '📦 冻品批发参考：' + parts.join('；') + ' 元/斤。';
+  });
+
+  var h = '';
+  if (st.hi != null){
+    var trendWord = st.up > st.down ? '整体偏强' : (st.down > st.up ? '整体走弱' : '基本平稳');
+    var advice = st.up > st.down ? '可按需分批采购，避免追高' : (st.down > st.up ? '可择低询价锁单，降低到货成本' : '按订单节奏均衡采购即可');
+    h += '<p>📊 ' + esc(titleShort) + '主力报价区间 <b>' + st.lo.toFixed(2) + '–' + st.hi.toFixed(2) + '</b> 元/斤' +
+      '（最高 ' + esc(st.hiName) + ' ' + st.hi.toFixed(2) + '，最低 ' + esc(st.loName) + ' ' + st.lo.toFixed(2) + '）；' +
+      '环比上涨 ' + st.up + ' 项、下落 ' + st.down + ' 项、持平 ' + st.flat + ' 项，' + trendWord + '。</p>' +
+      '<p>💡 ' + esc(advice) + '。</p>';
+  }
+  if (fdTxt) h += '<p>' + esc(fdTxt) + '</p>';
+  matched.forEach(function(b){
+    h += '<p><b>' + esc(b.h || '研判') + '</b></p><p>' + esc(b.p || b.text || '') + '</p>';
+  });
+  if (notice && (secName === '三黄鸡' || secName === '公鸡' || !matched.length)){
+    h += '<p class="notice-p">⚠️ ' + esc(notice.p || '') + '</p>';
+  }
+
+  if (!h) return '';
+  return '<div class="sec-foot"><div class="foot-t">🧭 本板块今日研判</div>' + h + '</div>';
+}
+
+/* ---------- 渲染 ---------- */
+function render(){
+  var d = STATE.data;
+  $('hdDate').textContent = (d.meta.date_cn || '') + (d.meta.weekday ? ' · ' + d.meta.weekday : '');
+  renderCards(d);
+  renderTabs(d);
+  renderSection(d, STATE.tab);
+  renderFavs(d);
+  renderNews(d);
+  $('foot').textContent = d.footer || '禽类采购工作台';
+}
+
+function renderCards(d){
+  var h = '';
+  (d.trend_cards || []).forEach(function(tc){
+    var ch = tc.chart || {};
+    var vals = (ch.series && ch.series[0] && ch.series[0].values) || [];
+    h += '<div class="scard"><div class="nm">' + esc(tc.name) + '</div>' +
+      '<div class="pr">' + esc(tc.price) + '<small> ' + esc((tc.unit||'').trim()) + '</small></div>' +
+      '<div class="cmp">' + trendTags(vals) + '</div>' +
+      sparkline(ch.dates || [], ch.series || []) +
+      '<div class="nt">' + esc(tc.note || '') + '</div></div>';
+  });
+  $('cards').innerHTML = h;
+}
+
+function renderNews(d){
+  var box = $('news');
+  var news = d.news || [];
+  if (!news.length){
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = '';
+  var h = '<div class="news-list">';
+  news.forEach(function(n){
+    var date = n.date || '';
+    h += '<a class="nitem" href="' + esc(n.url) + '" target="_blank" rel="noopener">' +
+      '<div class="ntop"><span class="ntitle">' + esc(n.title) + '</span>' +
+      (date ? '<span class="ndate">' + esc(date) + '</span>' : '') + '</div>' +
+      '<div class="nsrc">来源：' + esc(n.src || '鸡病专业网') + '</div></a>';
+  });
+  h += '</div>';
+  $('newsList').innerHTML = h;
+}
+
+function renderTabs(d){
+  var btns = '';
+  (d.sections || []).forEach(function(s, i){
+    var nm = s.tab || SECTIONS[i] ? (SECTIONS[i] && SECTIONS[i].name) || s.title.replace(/^[一二三四五六]、/, '').split(/[（(]/)[0] : '';
+    btns += '<button data-i="' + i + '" class="' + (i === STATE.tab ? 'on' : '') + '">' + esc(nm) + '</button>';
+  });
+  $('tabs').innerHTML = btns;
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function(b){
+    b.onclick = function(){ STATE.tab = +b.getAttribute('data-i'); renderTabs(d); renderSection(d, STATE.tab); window.scrollTo({top: 0, behavior: 'smooth'}); };
+  });
+}
+
+function renderSection(d, si){
+  var s = d.sections[si];
+  var box = $('content');
+  if (!s){ box.innerHTML = ''; return; }
+  var html = '';
+  if (s.type === 'final'){
+    html = '<div class="sec-title">' + esc(s.title) + '</div>';
+    (s.blocks || []).forEach(function(b){
+      html += '<div class="blk" style="border-left-color:var(--accent);background:#fffdf5"><b>' + esc(b.h||'') + '</b><p>' + esc(b.p||b.text||'') + '</p></div>';
+    });
+    box.innerHTML = html; return;
+  }
+  html = '<div class="sec-title">' + esc(s.title) + '</div>';
+  var a = s.analysis;
+  if (a){
+    html += '<div class="ana"><div class="a-t">' + esc(a.title || '') + '</div>' +
+      '<div class="a-up">' + (a.up || []).map(function(x){ return '· ' + esc(x) + '<br>'; }).join('') + '</div>' +
+      ((a.ref && a.ref.length) ? '<div class="a-ref">' + a.ref.map(function(x){ return '💡 ' + esc(x) + '<br>'; }).join('') + '</div>' : '') +
+      '</div>';
+  }
+  (s.tables || []).forEach(function(t, ti){
+    var cap = t.cap || '';
+    html += cap ? '<div class="tbl-cap">' + esc(cap) + '</div>' : '';
+    html += '<div class="tbl-wrap"><table><thead><tr>';
+    (t.headers || []).forEach(function(h){ html += '<th>' + esc(h) + '</th>'; });
+    html += '<th style="width:26px"></th></tr></thead><tbody>';
+    (t.rows || []).forEach(function(row, ri){
+      html += '<tr>';
+      row.forEach(function(c){ html += cellHtml(c); });
+      var key = rowKey(si, ti, ri);
+      var on = STATE.favs[key] ? 'on' : '';
+      html += '<td><button class="fav-btn ' + on + '" data-k="' + key + '">' + (on ? '★' : '☆') + '</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  /* 本板块研判：把综合研判里的对应块分发给各板块 */
+  html += sectionJudge(d, si);
+  box.innerHTML = html;
+  Array.prototype.forEach.call(box.querySelectorAll('.fav-btn'), function(b){
+    b.onclick = function(){
+      var k = b.getAttribute('data-k');
+      if (STATE.favs[k]){ delete STATE.favs[k]; b.textContent = '☆'; b.classList.remove('on'); }
+      else {
+        var p = k.split('-');
+        var s2 = d.sections[+p[0]];
+        var row = s2.tables[+p[1]].rows[+p[2]];
+        STATE.favs[k] = { txt: rowText(row).slice(0, 60), sec: +p[0] };
+        b.textContent = '★'; b.classList.add('on');
+      }
+      localStorage.setItem('qx_wb_favs', JSON.stringify(STATE.favs));
+      renderFavs(d);
+    };
+  });
+}
+
+function renderFavs(d){
+  var box = $('favs');
+  var keys = Object.keys(STATE.favs);
+  if (!keys.length){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  var h = '<div class="card-t"><span>⭐ 我的收藏（点击跳转）</span><span style="font-size:11px;cursor:pointer" id="favClear">清空</span></div>';
+  h += keys.map(function(k){
+    var f = STATE.favs[k];
+    return '<div class="fitem" data-k="' + k + '"><span class="ftag">' + esc(SECTIONS[f.sec] ? SECTIONS[f.sec].name : '') + '</span><span class="ftxt">' + esc(f.txt) + '</span><span class="x" data-x="' + k + '">✕</span></div>';
+  }).join('');
+  box.innerHTML = h;
+  Array.prototype.forEach.call(box.querySelectorAll('.fitem'), function(el){
+    el.onclick = function(){
+      var k = el.getAttribute('data-k');
+      STATE.tab = +k.split('-')[0];
+      renderTabs(d); renderSection(d, STATE.tab);
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('.x'), function(x){
+    x.onclick = function(ev){
+      ev.stopPropagation();
+      delete STATE.favs[x.getAttribute('data-x')];
+      localStorage.setItem('qx_wb_favs', JSON.stringify(STATE.favs));
+      renderFavs(d);
+    };
+  });
+  $('favClear').onclick = function(){ STATE.favs = {}; localStorage.setItem('qx_wb_favs', '{}'); renderFavs(d); };
+}
+
+/* ---------- 搜索 ---------- */
+var kwTimer = null;
+function toggleSearch(show){
+  var p = $('searchPanel');
+  var ic = $('hdSearch');
+  if (show === undefined) show = !p.classList.contains('open');
+  if (show){ p.classList.add('open'); ic.textContent = '✕'; ic.classList.add('active'); setTimeout(function(){ $('kw').focus(); }, 50); }
+  else { p.classList.remove('open'); ic.textContent = '🔍'; ic.classList.remove('active'); $('kw').value = ''; }
+}
+$('hdSearch').onclick = function(){ toggleSearch(); };
+$('kw').addEventListener('input', function(){
+  clearTimeout(kwTimer);
+  kwTimer = setTimeout(function(){ doSearch(); }, 250);
+});
+$('kw').addEventListener('focus', function(){ $('searchPanel').classList.add('open'); });
+function doSearch(){
+  var q = $('kw').value.trim().toLowerCase();
+  if (!q){ renderSection(STATE.data, STATE.tab); return; }
+  var d = STATE.data, found = [];
+  (d.sections || []).forEach(function(s, si){
+    (s.tables || []).forEach(function(t, ti){
+      (t.rows || []).forEach(function(row, ri){
+        var txt = rowText(row).toLowerCase();
+        if (txt.indexOf(q) >= 0) found.push({ si: si, ti: ti, ri: ri, row: row });
+      });
+    });
+  });
+  var box = $('content');
+  if (!found.length){ box.innerHTML = '<div class="sec-title">🔍 无匹配</div>'; return; }
+  var h = '<div class="sec-title">🔍 找到 ' + found.length + ' 条</div><div class="res">';
+  found.forEach(function(f){
+    var nm = (d.sections[f.si].tab || SECTIONS[f.si].name || '');
+    h += '<div class="ritem" data-k="' + f.si + '"><span class="rtag">' + esc(nm) + '</span>' +
+      f.row.map(function(c){ var t = typeof c === 'object' ? c.t : String(c); var i = t.toLowerCase().indexOf(q); if (i >= 0){ return esc(t.slice(0,i)) + '<span class="hl">' + esc(t.slice(i, i+q.length)) + '</span>' + esc(t.slice(i+q.length)); } return esc(t); }).join('　') +
+      '</div>';
+  });
+  h += '</div>';
+  box.innerHTML = h;
+  Array.prototype.forEach.call(box.querySelectorAll('.ritem'), function(el){
+    el.onclick = function(){ STATE.tab = +el.getAttribute('data-k'); renderTabs(STATE.data); renderSection(STATE.data, STATE.tab); toggleSearch(false); };
+  });
+}
+$('refreshBtn').onclick = function(){ load(true); };
+
+/* ---------- 加载数据 ---------- */
+var REMOTE = 'https://raw.githubusercontent.com/AI-cloudo/-qinxing-daily-/main/data.json';
+function load(manual){
+  fetch(REMOTE + '?t=' + Date.now(), {cache: 'no-store'})
+    .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+    .then(function(j){
+      var oldDate = STATE.data && STATE.data.meta && STATE.data.meta.date_iso;
+      STATE.data = j; STATE.src = 'live'; setBadge();
+      if (manual){ render(); toast('已更新到最新数据'); }
+      else if (!STATE._loaded){ render(); }
+      else if (j.meta && j.meta.date_iso !== oldDate){ render(); toast('检测到新数据，已自动刷新'); }
+      STATE._loaded = true;
+    })
+    .catch(function(){
+      if (manual) toast('云端暂不可达，当前为缓存数据');
+    });
+}
+/* 初始：快照立即渲染，随后尝试拉取云端最新 */
+(function init(){
+  STATE.data = SNAPSHOT; STATE.src = 'snap'; setBadge();
+  render();
+  load(false);
+  setInterval(function(){ load(false); }, 120000);
   document.addEventListener('visibilitychange', function(){
-    if (!document.hidden) { setTimeout(check, 2000); }
+    if (!document.hidden) load(false);
   });
 })();
 </script>
