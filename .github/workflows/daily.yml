@@ -3,14 +3,12 @@ name: 每日禽类行情云端更新
 on:
   schedule:
     # GitHub 用世界标准时(UTC)：北京时间 = UTC + 8
-    # 22:50 UTC = 北京 06:50 | 23:50 UTC = 北京 07:50
-    # 每天跑两次：第一次尽量早，第二次兜底，保证 8 点前更新完毕
-    - cron: '50 22 * * *'
-    - cron: '50 23 * * *'
+    # 23:30 UTC = 北京 07:30，8 点前更新完毕
+    - cron: '30 23 * * *'
   workflow_dispatch: {}   # 允许手动触发
 
 permissions:
-  contents: write   # 自动提交 data.json/index.html 回仓库
+  contents: write   # 自动提交 data.json 回仓库
   pages: write       # 发布页面
   id-token: write
 
@@ -33,23 +31,22 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 抓取最新行情并生成页面
+      - name: 抓取最新行情与新闻（生成 data.json）
         run: |
           python scrape.py
-          python render.py
 
       - name: 把最新数据提交回仓库（作为明天的环比基准）
         run: |
           git config user.name "auto-report-bot"
           git config user.email "actions@github.com"
-          git add data.json state.json index.html
+          git add data.json state.json
           git diff --cached --quiet || git commit -m "自动更新 $(date -u +'%Y-%m-%d %H:%M') UTC"
           git push
 
       - name: 配置 GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: 上传页面
+      - name: 上传页面（index.html 为工作台，实时数据由页面从 data.json 拉取）
         uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
