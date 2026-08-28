@@ -45,6 +45,36 @@ def collect_articles():
     return arts
 
 
+def collect_news(max_news=6):
+    """从行业关注/市场分析/经营看点抓取禽类相关新闻标题+链接"""
+    keywords = re.compile(
+        r"肉鸡|蛋鸡|行情|价格|市场|冻品|白条|屠宰|毛鸡|蛋价|鸡价|817|麻鸡|"
+        r"三黄鸡|淘汰鸡|白羽|公鸡|活禽|棚前|收购价|批发|鸡肉|禽类|家禽|肉类",
+        re.I,
+    )
+    seen = set()
+    items = []
+    for path in ["/lists/1", "/lists/204", "/lists/269"]:
+        try:
+            h = fetch(BASE + path, timeout=15)
+        except Exception as e:
+            print("[warn] 新闻列表失败 %s: %s" % (path, e))
+            continue
+        for m in re.finditer(r'href="(/view/\d+)"[^>]*title="([^"]+)"', h):
+            title = m.group(2).strip()
+            url = BASE + m.group(1)
+            if url in seen or not keywords.search(title):
+                continue
+            seen.add(url)
+            # 尽量从标题提取日期
+            dm = re.search(r"(\d{4}年)?(\d{1,2})月(\d{1,2})日", title)
+            date_str = "%s/%s" % (dm.group(2), dm.group(3)) if dm else ""
+            items.append({"title": title, "url": url, "date": date_str, "src": "鸡病专业网"})
+    # 按 URL 中 view id 降序（新文章 id 更大），取最新 N 条
+    items.sort(key=lambda x: int(re.search(r"/view/(\d+)", x["url"]).group(1)), reverse=True)
+    return items[:max_news]
+
+
 def latest(arts, keyword, exclude=None):
     """找标题含关键词的最新文章（按标题日期排序）"""
     best = None
@@ -193,6 +223,11 @@ def main():
 
     arts = collect_articles()
     print("共发现文章链接 %d 篇" % len(arts))
+
+    # ===== 新闻资讯（禽类相关） =====
+    news_items = collect_news()
+    d["news"] = news_items
+    print("抓取到禽类相关新闻 %d 条" % len(news_items))
     # 网站会提前发布"明日"文章，只选日期不超过今天的，防止取到预测价
     max_key = (today.month, today.day)
 
