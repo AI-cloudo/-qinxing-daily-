@@ -175,6 +175,121 @@ def parse_817(html):
     return rows
 
 
+# ---------- mffb.com.cn（每日鸡蛋行情 / 鸡价行情，销区市场口径） ----------
+
+MFFB = "https://mffb.com.cn"
+
+# 重点销区/集散地城市（与「又鸟蛋」「小鲜农价」等小程序口径一致的市场报价）
+MFFB_CITIES = [
+    "北京", "上海", "广州", "东莞", "深圳", "天津", "重庆", "成都",
+    "武汉", "孝感", "长沙", "常德", "杭州", "南京", "福州", "泉州",
+    "南昌", "合肥", "郑州", "济南", "青岛", "临沂", "菏泽", "西安",
+    "太原", "石家庄", "沈阳", "哈尔滨", "长春", "昆明", "贵阳", "南宁",
+    "兰州", "乌鲁木齐", "呼和浩特", "银川", "海口", "苏州", "徐州", "盐城",
+]
+
+
+def mffb_latest(keyword):
+    """从 mffb 首页找当天标题含 keyword 的最新文章，返回 (url, title)"""
+    home = None
+    for _ in range(3):  # mffb 偶发 SSL 中断，重试
+        try:
+            home = fetch(MFFB + "/")
+            break
+        except Exception as e:
+            print("[warn] mffb 首页抓取失败，重试:", e)
+    if not home:
+        return None, ""
+    best = None
+    for m in re.finditer(r'href="(/a/(\d+)\.html)"[^>]*>([^<]{4,60})<', home):
+        title = m.group(3).strip()
+        if keyword in title:
+            if best is None or int(m.group(2)) > best[0]:
+                best = (int(m.group(2)), MFFB + m.group(1), title)
+    return (best[1], best[2]) if best else (None, "")
+
+
+def parse_mffb_egg(html):
+    """mffb 鸡蛋行情 → [{city, price, trend, txt}] 只保留 MFFB_CITIES 中的市场
+    兼容两种版式：①分省城市均价列表（信息多）②市场段落实录（信息少，作为兜底）"""
+    flat = re.sub(r"<(br|/p|/div|/tr|/td)[^>]*>", " ", html)
+    flat = re.sub(r"<[^>]+>", " ", flat).replace("\xa0", " ")
+    out, seen = [], set()
+
+    def add(city, price, mark):
+        city = city[:-1] if city.endswith("市") else city
+        if city in seen or city not in MFFB_CITIES:
+            return
+        seen.add(city)
+        trend = "up" if mark == "涨" else ("down" if mark == "落" else "flat")
+        out.append({"city": city, "price": price, "trend": trend,
+                    "txt": {"涨": "涨", "落": "落", "稳": "稳"}.get(mark, "—")})
+
+    # 版式①：城市均价列表（如「东莞市 5.38 元/斤 涨」）
+    for m in re.finditer(r"([一-龥]{2,8}?市?)\s*(\d\.\d{2})\s*元/斤\s*(涨|落|稳)?", flat):
+        add(m.group(1), m.group(2), m.group(3) or "")
+    if len(out) >= 3:
+        return out
+
+    # 版式②：段落实录（如「今日黑龙江哈尔滨、拉林主流鸡蛋价落0.1，褐壳大蛋到户价参考5.2元/斤」）
+    for m in re.finditer(r"([一-龥]{2,12})[^。；]{0,40}?([\d]\.\d{1,2})\s*元/斤", flat):
+        seg = m.group(1)
+        hit_city = None
+        for c in MFFB_CITIES:
+            if seg.endswith(c):
+                hit_city = c
+                break
+        if not hit_city:
+            continue
+        mark = "落" if "落" in seg else ("涨" if "涨" in seg else "")
+        add(hit_city, m.group(2), mark)
+    return out
+
+
+def parse_mffb_broiler(html):
+    """mffb 鸡价行情 → [{region, city, price, chg, amt}] 只取肉毛鸡（白羽）区块"""
+    txt = re.sub(r"<script.*?</script>", "", html, flags=re.S)
+    txt = re.sub(r"<[^>]+>", "\n", txt)
+    lines = [l.strip() for l in txt.split("\n") if l.strip()]
+    out, region, kind = [], "", ""
+    for ln in lines:
+        m = re.match(r"^([一-龥]{2,8}地区)$", ln)
+        if m:
+            region = m.group(1).replace("地区", "")
+            continue
+        if "817" in ln:
+            kind = "817"
+            continue
+        if "苗行情" in ln or "鸡苗" in ln:
+            kind = "miao"
+            continue
+        if "肉毛鸡行情" in ln:
+            kind = "broiler"
+            continue
+        if kind != "broiler":
+            continue
+        m = re.match(r"^([一-龥]{2,6})\s+(\d\.\d{2}-\d\.\d{2})\s+(下滑|上涨|持平)([\d.]*)$", ln)
+        if not m:
+            continue
+        lo, hi = (float(x) for x in m.group(2).split("-"))
+        # 白羽肉毛鸡全国合理区间约 2.8-4.2 元/斤，剔除同页混入的麻鸡/817 等高价行
+        if not (2.8 <= (lo + hi) / 2 <= 4.2):
+            continue
+        out.append({"region": region, "city": m.group(1), "price": m.group(2),
+                    "chg": m.group(3), "amt": m.group(4) or ""})
+    return out
+
+
+def fetch_retry(url, times=3):
+    """mffb 偶发 SSL 中断，重试几次"""
+    for i in range(times):
+        try:
+            return fetch(url)
+        except Exception as e:
+            print("[warn] 抓取失败(%d/%d) %s: %s" % (i + 1, times, url, e))
+    return None
+
+
 # ---------- 工具 ----------
 
 def avg_of(prices):
@@ -325,6 +440,32 @@ def main():
         }
         sec["tag"] = "数据日期 %s · 鸡病专业网 · 云端自动更新" % sum_date
 
+    # ===== 板块二补充：mffb 重点销区市场蛋价（销区口径，与又鸟蛋/小鲜农价同类） =====
+    mffb_egg_url, mffb_egg_title = mffb_latest("鸡蛋价格行情")
+    print("mffb 鸡蛋文章: %s" % mffb_egg_title)
+    if mffb_egg_url:
+        try:
+            egg_html = fetch_retry(mffb_egg_url)
+            mffb_egg = parse_mffb_egg(egg_html) if egg_html else []
+        except Exception as e:
+            print("[warn] mffb 鸡蛋抓取失败:", e)
+            mffb_egg = []
+        print("mffb 销区市场解析: %d 个" % len(mffb_egg))
+        if len(mffb_egg) < 3:
+            print("[info] mffb 销区数据不足 3 个市场，本次跳过该表")
+        if len(mffb_egg) >= 3:
+            sec = d["sections"][1]
+            keep = [t for t in sec.get("tables", []) if t["headers"][0] != "重点销区"]
+            sec["tables"] = keep + [{
+                "headers": ["重点销区", "蛋价（元/斤）", "当日氛围"],
+                "rows": [[r["city"], {"t": r["price"], "dir": r["trend"]},
+                          {"t": r["txt"], "dir": r["trend"]}] for r in mffb_egg]}]
+            sec["tag"] = "%s　|　销区市场 %s · mffb" % (sec.get("tag", ""), mffb_egg_title[-6:])
+            dips = [r["city"] for r in mffb_egg if r["trend"] == "down"]
+            if dips and "ref" in sec.get("analysis", {}):
+                sec["analysis"]["ref"].append(
+                    "销区跌价市场：%s，采购可优先比价这些区域" % "/".join(dips[:6]))
+
     # ===== 板块五：白羽肉鸡 =====
     broiler_rows, bro_date = [], ""
     hit = latest(arts, "肉鸡行情分析")
@@ -361,6 +502,43 @@ def main():
                             else "高位按需采购，不追高，关注屠企开工与走货节奏")],
         }
         sec["tag"] = "数据日期 %s · 鸡病专业网 · 云端自动更新" % bro_date
+
+    # ===== 板块五补充：mffb 主产区棚前分市（含当日涨跌幅度） =====
+    mffb_jz_url, mffb_jz_title = mffb_latest("鸡价行情")
+    print("mffb 鸡价文章: %s" % mffb_jz_title)
+    if mffb_jz_url:
+        try:
+            jz_html = fetch_retry(mffb_jz_url)
+            mffb_jz = parse_mffb_broiler(jz_html) if jz_html else []
+        except Exception as e:
+            print("[warn] mffb 鸡价抓取失败:", e)
+            mffb_jz = []
+        print("mffb 白羽分市解析: %d 行" % len(mffb_jz))
+        if mffb_jz:
+            sec = d["sections"][4]
+            keep = [t for t in sec.get("tables", []) if t["headers"][0] != "产区"]
+            # 山东已在「山东各市」表全量展示，这里每产区取前 5 市，避免表格过长
+            per_region, order = {}, []
+            for r in mffb_jz:
+                per_region.setdefault(r["region"], [])
+                if r["region"] not in order:
+                    order.append(r["region"])
+                if len(per_region[r["region"]]) < 5:
+                    per_region[r["region"]].append(r)
+            rows = []
+            for reg in order:
+                for r in per_region[reg]:
+                    if r["chg"] == "持平":
+                        dr, txt = "flat", "—"
+                    elif r["chg"] == "下滑":
+                        dr, txt = "down", "-" + (r["amt"] or "")
+                    else:
+                        dr, txt = "up", "+" + (r["amt"] or "")
+                    rows.append([r["region"], r["city"], {"t": r["price"], "dir": dr},
+                                 {"t": txt, "dir": dr}])
+            sec["tables"] = keep + [{"headers": ["产区", "城市", "棚前价（元/斤）", "当日涨跌"], "rows": rows}]
+            down_n = sum(1 for r in mffb_jz if r["chg"] == "下滑")
+            sec["tag"] = "%s　|　分市 %d 市（%d 跌）· mffb" % (sec.get("tag", ""), len(mffb_jz), down_n)
 
     # ===== 板块四：各地麻鸡/公鸡产区文章 =====
     region_pats = [
