@@ -21,7 +21,7 @@ for i, s in enumerate(data.get('sections', [])):
     for t in s.get('tables', []):
         t.setdefault('cap', '')
 
-# 构造第四张速览卡：白羽肉鸡
+# 构造第四张速览卡：白羽肉鸡（云端 scrape.py 已维护带历史的卡时，直接沿用不覆盖）
 def avg_price(s):
     nums = re.findall(r'\d+\.?\d*', str(s))
     if not nums:
@@ -53,10 +53,11 @@ if by:
                 baiyu_note = str(row[0]) + '棚前 · 低位可分批建仓'
                 break
 
-if baiyu_price:
-    data.setdefault('trend_cards', [])
-    # 只保留前3个已有的，避免重复添加
-    data['trend_cards'] = [tc for tc in data['trend_cards'] if tc.get('name') != '白羽肉鸡']
+data.setdefault('trend_cards', [])
+if any(tc.get('name') == '白羽肉鸡' for tc in data['trend_cards']):
+    # 云端已维护（含历史序列），直接沿用，否则每天重建会丢掉趋势数据
+    print('白羽速览卡已存在，沿用（保留历史）')
+elif baiyu_price:
     data['trend_cards'].append({
         'name': '白羽肉鸡',
         'price': baiyu_price,
