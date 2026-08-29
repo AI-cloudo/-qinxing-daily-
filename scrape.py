@@ -664,7 +664,21 @@ def main():
     d["meta"]["date_cn"] = date_cn
     d["meta"]["date_iso"] = today.isoformat()
     d["meta"]["weekday"] = weekday
-    d["footer"] = ("云端自动更新 · 数据源：鸡病专业网 jbzyw.com · 页面生成 %s %s · "
+    # 更新时间（北京时间）：与「数据日期」分开，避免源未出新价时被误以为没更新
+    try:
+        bj = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+        d["meta"]["update_time"] = bj.strftime("%m-%d %H:%M")
+        # 各板块实际数据日期汇总（取最旧的一个，提示哪些板块是沿用数据）
+        tags = [s.get("tag", "") for s in d.get("sections", [])]
+        data_dates = re.findall(r"(\d+)/(\d+)", " ".join(tags))
+        if data_dates:
+            old = min(data_dates, key=lambda x: (int(x[0]), int(x[1])))
+            d["meta"]["data_date"] = "%d/%d" % (int(old[0]), int(old[1]))
+            if d["meta"]["data_date"] != "%d/%d" % (bj.month, bj.day):
+                d["meta"]["data_stale"] = True
+    except Exception as e:
+        print("[warn] 更新时间写入失败:", e)
+    d["footer"] = ("云端自动更新 · 数据源：鸡病专业网 jbzyw.com / mffb.com.cn · 页面生成 %s %s · "
                    "手机页面每2分钟自动检查新版" % (date_cn, weekday))
 
     # ===== 保存 =====
