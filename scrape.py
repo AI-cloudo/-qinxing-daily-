@@ -280,6 +280,32 @@ def backfill_broiler_history(arts, days=7):
     return out
 
 
+MYSTEEL_BY = "https://www.mysteel.com/hot/1667520.html"   # 我的钢铁网·鸡业·2026年白羽肉鸡行情
+
+
+def parse_mysteel_broiler(html):
+    """我的钢铁网（Mysteel 钢联）白羽肉鸡分市场报价
+    → {date, rows:[{market, src, spec, price}]}
+    页面形如：白羽肉鸡 社会 临沂 4.5-6.0斤 3.05"""
+    txt = re.sub(r"<script.*?</script>|<style.*?</style>", "", html, flags=re.S)
+    txt = re.sub(r"<[^>]+>", " ", txt)
+    txt = re.sub(r"[ \t\xa0]+", " ", txt)
+    dm = re.search(r"今日价格[^。]{0,40}?(20\d\d-\d\d-\d\d)", txt)
+    date = dm.group(1) if dm else ""
+    rows, seen = [], set()
+    for m in re.finditer(r"白羽肉鸡\s+(社会|共担)\s+([一-龥]{2,6}?)\s+([\d.]+)-([\d.]+)斤\s+([\d.]{3,5})", txt):
+        src, market, spec, price = m.group(1), m.group(2), m.group(3) + "-" + m.group(4), m.group(5)
+        key = (market, src)
+        if key in seen:
+            continue
+        seen.add(key)
+        pv = float(price)
+        if not (2.5 <= pv <= 5.0):      # 白羽毛鸡合理区间
+            continue
+        rows.append({"market": market, "src": src, "spec": spec, "price": price})
+    return {"date": date, "rows": rows}
+
+
 def parse_mffb_broiler(html):
     """mffb 鸡价行情 → [{region, city, price, chg, amt}] 只取肉毛鸡（白羽）区块"""
     txt = re.sub(r"<script.*?</script>", "", html, flags=re.S)
@@ -574,6 +600,23 @@ def main():
             sec["tables"] = keep + [{"headers": ["产区", "城市", "棚前价（元/斤）", "当日涨跌"], "rows": rows}]
             down_n = sum(1 for r in mffb_jz if r["chg"] == "下滑")
             sec["tag"] = "%s　|　分市 %d 市（%d 跌）· mffb" % (sec.get("tag", ""), len(mffb_jz), down_n)
+
+    # ===== 板块五补充：Mysteel（我的钢铁网·鸡业）白羽分市场报价 =====
+    try:
+        ms = parse_mysteel_broiler(fetch_retry(MYSTEEL_BY))
+    except Exception as e:
+        print("[warn] Mysteel 抓取失败:", e)
+        ms = None
+    if ms and ms.get("rows"):
+        print("Mysteel 白羽分市场: %d 行（%s）" % (len(ms["rows"]), ms.get("date")))
+        sec = d["sections"][4]
+        keep = [t for t in sec.get("tables", []) if t["headers"][0] != "Mysteel市场"]
+        rows = [[r["market"], r["src"], r["spec"] + "斤", r["price"]] for r in ms["rows"]]
+        sec["tables"] = keep + [{"headers": ["Mysteel市场", "鸡源类型", "规格", "价格（元/斤）"],
+                                 "rows": rows}]
+        sec["tag"] = "%s　|　Mysteel %s" % (sec.get("tag", ""), ms.get("date", "")[5:] or "")
+    else:
+        print("Mysteel 白羽分市场: 无数据")
 
     # ===== 顶栏第4张速览卡「白羽肉鸡」：每日累积历史，卡片才有昨日/3天/7天趋势 =====
     # 之前这张卡由前端临时拼出（只有1个点），导致趋势栏空白、备注无数据源
