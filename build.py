@@ -1,4 +1,4 @@
-import json, re, os, urllib.request
+import json, re, os, time, urllib.request
 
 # 脚本自身所在目录：本地与 GitHub Actions 云端通用（勿写绝对路径）
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -107,8 +107,19 @@ else:
 
 snap_json = json.dumps(data, ensure_ascii=False, separators=(',', ':'))
 html = tmpl.replace('/*__SNAPSHOT_JSON__*/', 'var SNAPSHOT = ' + snap_json + ';')
+
+# 注入构建号：页面据此判断自己是否为最新版，过期则自动重载（绕开手机缓存）
+build_id = time.strftime('%Y%m%d-%H%M')
+html = html.replace('/*__BUILD_ID__*/"dev"', '"%s"' % build_id)
+if '/*__BUILD_ID__*/' in html:
+    print('[warn] BUILD_ID 占位符未替换')
+
+# 页脚附上版本号，便于确认手机上跑的是哪一版
+html = html.replace('</body>', '<div style="text-align:center;font-size:10px;color:#9aa;'
+                    'padding:6px 0 10px">页面版本 %s</div></body>' % build_id)
+
 open(os.path.join(BASE, 'index.html'), 'w', encoding='utf-8').write(html)
-print('index.html:', len(html), 'B')
+print('index.html:', len(html), 'B  版本', build_id)
 print('trend_cards 数量:', len(data.get('trend_cards', [])))
 for tc in data.get('trend_cards', []):
     print(' -', tc['name'], tc['price'], tc['unit'])
