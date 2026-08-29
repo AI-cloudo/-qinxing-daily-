@@ -33,15 +33,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 抓取最新行情与新闻（生成 data.json）
+      - name: 抓取行情与新闻，并把当日数据烘进页面快照
         run: |
           python scrape.py
+          python build.py
 
-      - name: 把最新数据提交回仓库（作为明天的环比基准）
+      - name: 把最新数据与页面提交回仓库（作为明天的环比基准）
         run: |
           git config user.name "auto-report-bot"
           git config user.email "actions@github.com"
-          git add data.json state.json
+          git add data.json state.json index.html
           git diff --cached --quiet || git commit -m "自动更新 $(date -u +'%Y-%m-%d %H:%M') UTC"
           git push
 
