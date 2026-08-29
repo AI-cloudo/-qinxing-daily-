@@ -246,6 +246,40 @@ def parse_mffb_egg(html):
     return out
 
 
+SHANDONG = ("滨州", "德州", "菏泽", "济南", "济宁", "莱芜", "临沂", "聊城", "日照", "青岛",
+            "威海", "潍坊", "莱阳", "招远", "烟台", "东营", "淄博", "泰安", "枣庄")
+
+
+def backfill_broiler_history(arts, days=7):
+    """从鸡病专业网历史「肉鸡行情分析」文章回填山东棚前均价，
+    让白羽速览卡立刻有昨日/3天/7天趋势，而不是等 7 天攒数据"""
+    out = []
+    today = datetime.date.today()
+    for i in range(days, 0, -1):
+        dt = today - datetime.timedelta(days=i)
+        md = "%d/%d" % (dt.month, dt.day)
+        pat = "%d月%d日" % (dt.month, dt.day)
+        # collect_articles() 返回 {标题: 链接}
+        url = None
+        for title, link in arts.items():
+            if "肉鸡行情分析" in title and pat in title:
+                url = link
+                break
+        if not url:
+            continue
+        try:
+            rows = parse_broiler(fetch(url, timeout=15))
+        except Exception:
+            continue
+        sd = [r for r in rows if r["city"] in SHANDONG]
+        if not sd:
+            continue
+        v = avg_of([r["price"] for r in sd])
+        if v:
+            out.append((md, round(v, 2)))
+    return out
+
+
 def parse_mffb_broiler(html):
     """mffb 鸡价行情 → [{region, city, price, chg, amt}] 只取肉毛鸡（白羽）区块"""
     txt = re.sub(r"<script.*?</script>", "", html, flags=re.S)
@@ -468,6 +502,7 @@ def main():
 
     # ===== 板块五：白羽肉鸡 =====
     broiler_rows, bro_date = [], ""
+    avg, mffb_jz = None, []   # 预置，供后面速览卡使用（抓取失败时不致报错）
     hit = latest(arts, "肉鸡行情分析")
     if hit:
         _, title, url = hit
@@ -539,6 +574,68 @@ def main():
             sec["tables"] = keep + [{"headers": ["产区", "城市", "棚前价（元/斤）", "当日涨跌"], "rows": rows}]
             down_n = sum(1 for r in mffb_jz if r["chg"] == "下滑")
             sec["tag"] = "%s　|　分市 %d 市（%d 跌）· mffb" % (sec.get("tag", ""), len(mffb_jz), down_n)
+
+    # ===== 顶栏第4张速览卡「白羽肉鸡」：每日累积历史，卡片才有昨日/3天/7天趋势 =====
+    # 之前这张卡由前端临时拼出（只有1个点），导致趋势栏空白、备注无数据源
+    if avg is not None:
+        cards = d.setdefault("trend_cards", [])
+        by = None
+        for c in cards:
+            if "白羽" in (c.get("name") or ""):
+                by = c
+                break
+        if by is None:
+            by = {"name": "白羽肉鸡", "unit": "元/斤",
+                  "chart": {"dates": [], "series": [{"name": "山东棚前均价", "values": []}]}}
+            cards.append(by)
+        ch = by.setdefault("chart", {})
+        ch.setdefault("dates", [])
+        if not ch.get("series"):
+            ch["series"] = [{"name": "山东棚前均价", "values": []}]
+        vals = ch["series"][0].setdefault("values", [])
+        # 历史不足 3 天时，从鸡病专业网往期文章回填，让趋势立刻可用
+        if len(ch["dates"]) < 3:
+            try:
+                hist = backfill_broiler_history(arts)
+            except Exception as e:
+                print("[warn] 白羽历史回填失败:", e)
+                hist = []
+            if hist:
+                ch["dates"] = [h[0] for h in hist]
+                ch["series"][0]["values"] = [h[1] for h in hist]
+                vals = ch["series"][0]["values"]
+                print("白羽历史回填 %d 天: %s" % (len(hist), ch["dates"]))
+        md = "%d/%d" % (today.month, today.day)
+        if ch["dates"] and ch["dates"][-1] == md:
+            vals[-1] = round(avg, 2)          # 同一天重复跑，覆盖当天值
+        else:
+            ch["dates"].append(md)
+            vals.append(round(avg, 2))
+            if len(ch["dates"]) > 10:
+                ch["dates"] = ch["dates"][-10:]
+                ch["series"][0]["values"] = vals[-10:]
+        # 首日没有历史时，用山东各市的环比幅度推算昨日价，让「较昨日」立刻有值
+        if len(ch["dates"]) == 1:
+            deltas = []
+            for r in sd:
+                c = r.get("cell")
+                t = c.get("t") if isinstance(c, dict) else None
+                m = re.match(r"^([↓↑])([\d.]+)$", t or "")
+                if m:
+                    v = float(m.group(2))
+                    deltas.append(-v if m.group(1) == "↓" else v)
+            if deltas:
+                prev = round(avg - sum(deltas) / len(deltas), 2)
+                yd = today - datetime.timedelta(days=1)
+                ch["dates"].insert(0, "%d/%d" % (yd.month, yd.day))
+                ch["series"][0]["values"].insert(0, prev)
+                print("白羽昨日价(按环比推算): %s" % prev)
+        by["price"] = fmt(avg)
+        src = "鸡病专业网" + (" + mffb 分产区" if mffb_jz else "")
+        by["note"] = ("山东%d市棚前均价（%s数据）· 数据源：%s · 云端每日更新"
+                      % (len(sd), bro_date or "当日", src))
+        print("白羽速览卡: %s 元/斤，历史 %d 天 %s"
+              % (by["price"], len(ch["dates"]), ch["dates"][-3:]))
 
     # ===== 板块四：各地麻鸡/公鸡产区文章 =====
     region_pats = [
