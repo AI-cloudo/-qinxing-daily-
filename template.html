@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1e3a2f">
+<title>禽类采购工作台</title>
+<style>
+:root{
+  --bg:#f3f5f4; --card:#ffffff; --line:#e5e9e7;
+  --ink:#1c2b24; --sub:#6b7a72; --brand:#1e3a2f; --brand2:#2f5d3a;
+  --up:#d63b3b; --down:#0f9d5f; --flat:#9aa5a0; --accent:#e8a33d;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{font-size:15px}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;padding-bottom:60px}
+header{position:sticky;top:0;z-index:50;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:14px 16px 12px;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+.hd-top{display:flex;align-items:center;justify-content:space-between}
+.hd-title{font-size:18px;font-weight:700;letter-spacing:.5px}
+.hd-title .ico{margin-right:6px}
+.hd-date{font-size:12px;opacity:.92;margin-top:3px}
+.hd-badge{font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.16);white-space:nowrap}
+.hd-badge.live{background:#34c98f;color:#0b2b1d;font-weight:600}
+.hd-badge.snap{background:#f0b45a;color:#5c3a05;font-weight:600}
+.hd-search{font-size:18px;cursor:pointer;padding:4px;opacity:.95}
+.hd-search.active{opacity:1}
+.hd-refresh{font-size:17px;cursor:pointer;padding:4px;color:#fff;opacity:.95;transition:opacity .2s}
+.hd-refresh:active{opacity:.6}
+/* 搜索面板 */
+.search-panel{max-height:0;overflow:hidden;transition:max-height .25s ease,opacity .2s;opacity:0;background:#fff;color:var(--ink);border-radius:0 0 14px 14px;margin:-12px -16px 12px;padding:0 16px;box-shadow:0 4px 10px rgba(0,0,0,.12)}
+.search-panel.open{max-height:70px;opacity:1;padding-top:10px;padding-bottom:10px}
+.search-panel input{width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:14px;background:#fafbfa;outline:none}
+.search-panel input:focus{border-color:var(--brand2)}
+main{max-width:860px;margin:0 auto;padding:12px 12px 0}
+.card{background:var(--card);border-radius:14px;box-shadow:0 1px 4px rgba(30,58,47,.07);padding:14px;margin-bottom:12px}
+.card-t{font-size:13px;font-weight:600;color:var(--sub);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+/* 速览卡 */
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
+.scard{background:var(--card);border-radius:14px;box-shadow:0 1px 4px rgba(30,58,47,.07);padding:12px 10px;position:relative;overflow:hidden}
+.scard .nm{font-size:12px;color:var(--sub);margin-bottom:4px}
+.scard .pr{font-size:18px;font-weight:800;letter-spacing:-.3px}
+.scard .pr small{font-size:10px;font-weight:400;color:var(--sub)}
+.scard .cmp{display:flex;flex-wrap:wrap;gap:4px 8px;margin-top:6px;min-height:20px}
+.scard .cmp .tag{font-size:10px;padding:2px 6px;border-radius:12px;background:#f2f4f3;font-weight:600;white-space:nowrap}
+.scard .cmp .tag.up{background:#fdecec;color:var(--up)}
+.scard .cmp .tag.down{background:#e9f7f0;color:var(--down)}
+.scard .cmp .tag.flat{background:#eef0ee;color:var(--flat)}
+.scard svg{width:100%;height:34px;margin-top:6px;display:block}
+.scard .nt{font-size:10px;color:var(--sub);margin-top:6px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* 搜索 */
+.search-row{display:flex;gap:8px;margin-top:10px}
+.search-row input{flex:1;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:14px;background:#fafbfa;outline:none}
+.search-row input:focus{border-color:var(--brand2)}
+.sec-foot{background:#f6f9f7;border-radius:10px;padding:10px 12px;margin-top:12px}
+.sec-foot .foot-t{font-size:12px;font-weight:700;color:var(--brand2);margin-bottom:5px}
+.sec-foot p{font-size:12.5px;line-height:1.6;color:var(--ink);margin-bottom:4px}
+.sec-foot p.notice-p{font-size:11.5px;color:#b8860b;background:#fffbf0;border-radius:6px;padding:4px 6px}
+.sec-foot p:last-child{margin-bottom:0}
+/* tabs */
+nav.tabs{position:sticky;top:76px;z-index:40;background:var(--bg);padding:6px 0 8px;display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{flex-shrink:0;border:none;background:var(--card);color:var(--sub);font-size:13px;padding:8px 14px;border-radius:20px;box-shadow:0 1px 3px rgba(30,58,47,.08);cursor:pointer}
+nav.tabs button.on{background:var(--brand2);color:#fff;font-weight:600}
+/* 板块内容 */
+.sec-title{font-size:16px;font-weight:700;margin:4px 0 10px;color:var(--ink)}
+.ana{background:#fffdf5;border:1px solid #f3e7c8;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.6}
+.ana .a-t{font-size:12px;font-weight:700;color:#8a6d1f;margin-bottom:5px}
+.ana .a-up{color:var(--ink)}
+.ana .a-ref{color:#8a7a4d;margin-top:4px}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:10px;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:480px}
+th{background:#f0f3f1;color:#55645c;font-weight:600;text-align:left;padding:8px 9px;white-space:nowrap;border-bottom:1px solid var(--line)}
+td{padding:8px 9px;border-bottom:1px solid #f0f2f1;white-space:nowrap;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:nth-child(even) td{background:#fafbfa}
+td.c-up{color:var(--up);font-weight:700}
+td.c-down{color:var(--down);font-weight:700}
+td.c-flat{color:var(--flat)}
+td .fav-btn{border:none;background:none;font-size:15px;cursor:pointer;padding:0 4px;opacity:.55}
+td .fav-btn.on{opacity:1}
+.tbl-cap{font-size:11.5px;font-weight:700;color:var(--brand2);padding:8px 10px 4px}
+.hl{background:#ffe08a;border-radius:2px}
+/* 收藏夹 */
+.favs .fitem{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:8px 10px;background:#f6f9f7;border-radius:10px;margin-bottom:6px;cursor:pointer}
+.favs .fitem .ftag{flex-shrink:0;font-size:10px;background:var(--brand2);color:#fff;padding:2px 7px;border-radius:10px}
+.favs .fitem .ftxt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.favs .fitem .x{border:none;background:none;color:var(--sub);font-size:14px;cursor:pointer;padding:2px}
+/* 搜索结果 */
+.res .ritem{padding:9px 11px;border-bottom:1px dashed var(--line);font-size:12.5px;cursor:pointer}
+.res .ritem:last-child{border-bottom:none}
+.res .rtag{font-size:10px;background:#eef2f0;color:var(--brand2);padding:2px 6px;border-radius:8px;margin-right:6px}
+/* 提示条 */
+.toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%) translateY(20px);background:rgba(20,30,26,.92);color:#fff;font-size:13px;padding:10px 18px;border-radius:24px;opacity:0;transition:all .3s;z-index:99;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+footer{text-align:center;font-size:11px;color:#a3aca6;padding:18px 12px 8px;line-height:1.7}
+/* 新闻资讯 */
+.news .news-list{display:flex;flex-direction:column;gap:8px}
+.news .nitem{display:block;text-decoration:none;color:var(--ink);background:#f6f9f7;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.5}
+.news .nitem .ntop{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:3px}
+.news .nitem .ntitle{flex:1;font-weight:600}
+.news .nitem .ndate{flex-shrink:0;font-size:10px;color:var(--sub);white-space:nowrap;background:#fff;padding:1px 6px;border-radius:8px}
+.news .nitem .nsrc{font-size:10px;color:var(--sub);margin-top:4px}
+.news .nitem-empty{text-align:center;color:var(--sub);font-size:12px;padding:14px}
+</style>
+</head>
+<body>
+<header>
+  <div class="hd-top">
+    <div>
+      <div class="hd-title"><span class="ico">🐔</span>禽类采购工作台</div>
+      <div class="hd-date" id="hdDate">加载中…</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="hd-badge" id="hdBadge">…</div>
+      <span class="hd-refresh" id="refreshBtn" title="刷新数据">⟳</span>
+      <span class="hd-search" id="hdSearch">🔍</span>
+    </div>
+  </div>
+  <div class="search-panel" id="searchPanel"><input id="kw" type="search" placeholder="搜省份/品种/价格，如：菏泽、黑凤、三黄…"></div>
+</header>
+<main>
+  <div class="cards" id="cards"></div>
+
+  <div class="card favs" id="favs"></div>
+
+  <nav class="tabs" id="tabs"></nav>
+  <div class="card" id="content"></div>
+
+  <div class="card news" id="news">
+    <div class="card-t"><span>📰 行业资讯 · 鲜活/冻品/市场</span><span id="newsMore" style="font-size:11px;color:var(--sub)">来源：鸡病专业网</span></div>
+    <div class="news-list" id="newsList"></div>
+  </div>
+</main>
+<footer id="foot">禽类采购工作台 · 云端自动更新</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+/*__SNAPSHOT_JSON__*/
+
+var STATE = {
+  data: null, src: 'snap', tab: 0,
+  favs: {}, kw: ''
+};
+try { STATE.favs = JSON.parse(localStorage.getItem('qx_wb_favs') || '{}'); } catch(e){}
+var SECTIONS = [
+  {name:'淘汰鸡'}, {name:'鸡蛋'}, {name:'三黄鸡'},
+  {name:'公鸡'}, {name:'白羽'}, {name:'研判'}
+];
+var $ = function(id){ return document.getElementById(id); };
+var esc = function(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+
+function cellHtml(c){
+  if (c === null || c === undefined) return '<td></td>';
+  if (typeof c === 'object') {
+    var cls = c.dir === 'up' ? 'c-up' : (c.dir === 'down' ? 'c-down' : 'c-flat');
+    return '<td class="' + cls + '">' + esc(c.t) + '</td>';
+  }
+  return '<td>' + esc(c) + '</td>';
+}
+function rowKey(si, ti, ri){ return si + '-' + ti + '-' + ri; }
+function rowText(row){ return row.map(function(c){ return typeof c === 'object' ? c.t : c; }).join(' '); }
+
+function setBadge(){
+  var b = $('hdBadge');
+  if (STATE.src === 'live'){ b.className = 'hd-badge live'; b.textContent = '● 实时'; }
+  else { b.className = 'hd-badge snap'; b.textContent = '● 缓存'; }
+}
+function toast(msg){
+  var t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 2200);
+}
+
+/* ---------- 趋势标签：昨日 / 3天 / 7天 ---------- */
+function trendTag(vals, days, label){
+  if (!vals || vals.length < 2) return '<span class="tag flat">' + label + ' —</span>';
+  var n = Math.min(days, vals.length);
+  var start = parseFloat(vals[vals.length - n]);
+  var end = parseFloat(vals[vals.length - 1]);
+  if (isNaN(start) || isNaN(end)) return '<span class="tag flat">' + label + ' —</span>';
+  var diff = end - start, TH = 0.001;
+  if (Math.abs(diff) < TH) return '<span class="tag flat">' + label + ' → 持平</span>';
+  var cls = diff > 0 ? 'up' : 'down';
+  var arrow = diff > 0 ? '↑' : '↓';
+  var abs = Math.abs(diff).toFixed(2);
+  return '<span class="tag ' + cls + '">' + label + arrow + abs + '</span>';
+}
+function trendTags(vals){
+  return trendTag(vals, 2, '昨日') + trendTag(vals, 3, '3天') + trendTag(vals, 7, '7天');
+}
+
+/* ---------- 迷你折线 ---------- */
+function sparkline(dates, series){
+  var W = 100, H = 36, P = 4;
+  var all = [];
+  series.forEach(function(s){ (s.values||[]).forEach(function(v){ var n = parseFloat(v); if(!isNaN(n)) all.push(n); }); });
+  if (all.length < 2) return '<svg viewBox="0 0 ' + W + ' ' + H + '"><text x="8" y="20" font-size="8" fill="#9aa5a0">待积累</text></svg>';
+  var mn = Math.min.apply(null, all), mx = Math.max.apply(null, all);
+  if (mn === mx){ mn -= 0.1; mx += 0.1; }
+  var px = function(i){ return P + i * (W - 2*P) / (dates.length - 1 || 1); };
+  var py = function(v){ return H - P - (v - mn) * (H - 2*P) / (mx - mn); };
+  var last = series.length - 1;
+  var parts = series.map(function(s, si){
+    var pts = (s.values||[]).map(function(v, i){ var n = parseFloat(v); return isNaN(n) ? null : px(i) + ',' + py(n); })
+      .filter(function(p){ return p; });
+    var dash = (si === last && series.length > 1) ? ' stroke-dasharray="3 3"' : '';
+    return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' +
+      (si === last ? '#d63b3b' : '#2f5d3a') + '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"' + dash + '/>';
+  }).join('');
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '">' + parts + '</svg>';
+}
+
+/* ---------- 本板块研判（综合研判分发 + 板块数据自动生成） ---------- */
+function sectionJudge(d, si){
+  var s = d.sections[si];
+  var finalSec = (d.sections || []).filter(function(x){ return x.type === 'final'; })[0];
+  var blocks = (finalSec && finalSec.blocks) || [];
+  var title = (s.tab || s.title || '').replace(/^[一二三四五六]、/, '');
+  var titleShort = title.replace(/（.*?）/g, '').replace(/行情/, '');
+  var matched = [];
+
+  // 按板块关键词匹配综合研判 blocks
+  var keyMap = [
+    {re:/淘汰鸡|价差|区域/, sec:'淘汰鸡'},
+    {re:/鸡蛋|蛋鸡|蛋价/, sec:'鸡蛋'},
+    {re:/三黄鸡/, sec:'三黄鸡'},
+    {re:/公鸡|黑凤|阉鸡/, sec:'公鸡'},
+    {re:/白羽肉鸡|白羽/, sec:'白羽'}
+  ];
+  var secName = '';
+  keyMap.forEach(function(k){ if(k.re.test(title)) secName = k.sec; });
+
+  blocks.forEach(function(b){
+    var h = (b.h || '').toLowerCase();
+    if (!secName) return;
+    if (secName === '淘汰鸡' && /价差|淘汰鸡/.test(h)) matched.push(b);
+    if (secName === '鸡蛋' && /蛋鸡|鸡蛋/.test(h)) matched.push(b);
+    if (secName === '三黄鸡' && /三黄鸡/.test(h)) matched.push(b);
+    if (secName === '公鸡' && /公鸡|黑凤/.test(h)) matched.push(b);
+    if (secName === '白羽' && /白羽/.test(h)) matched.push(b);
+  });
+  // 数据完整性提示单独提取，作为板块底部小字提示
+  var notice = null;
+  blocks.forEach(function(b){ if (/数据完整性/.test(b.h || '')) notice = b; });
+
+  // 由本板块数据自动生成研判：主表报价区间 + 涨跌 + 冻品批发参考
+  var st = {up:0, down:0, flat:0, hi:null, lo:null, hiName:'', loName:''};
+  // 涨跌统计：本板块全部表格
+  (s.tables || []).forEach(function(t){
+    (t.rows || []).forEach(function(row){
+      row.forEach(function(c){
+        if (c && typeof c === 'object' && c.dir){
+          if (c.dir === 'up') st.up++; else if (c.dir === 'down') st.down++; else st.flat++;
+        }
+      });
+    });
+  });
+  // 报价区间：仅取第一张主表，且列头必须含"元/斤"（排除环比/覆盖城市/规格等）
+  var t0 = (s.tables || [])[0];
+  if (t0){
+    var hs = t0.headers || [];
+    (t0.rows || []).forEach(function(row){
+      var name = String(row[0] || '');
+      if (hs[1] && /品种|品类/.test(hs[1]) && row[1]){
+        var v1 = (typeof row[1] === 'object' ? row[1].t : row[1]) || '';
+        name += '·' + String(v1);
+      }
+      hs.forEach(function(h, ci){
+        if (!h || h.indexOf('元/斤') < 0) return;
+        var c = row[ci]; if (c == null) return;
+        var txt = (typeof c === 'object' ? String(c.t || '') : String(c)).replace(/（[^）]*）|\([^)]*\)/g, ' ');
+        (txt.match(/\d+(?:\.\d+)?/g) || []).forEach(function(x){
+          var v = parseFloat(x);
+          if (v > 0 && v < 50){
+            if (st.hi == null || v > st.hi){ st.hi = v; st.hiName = name; }
+            if (st.lo == null || v < st.lo){ st.lo = v; st.loName = name; }
+          }
+        });
+      });
+    });
+  }
+  // 冻品批发参考行：三黄鸡/公鸡板块的冻品批发价表
+  var fdTxt = '';
+  (s.tables || []).forEach(function(t){
+    if ((t.headers || []).join('').indexOf('冻品批发价') < 0) return;
+    var parts = [];
+    (t.rows || []).forEach(function(row){
+      var nm = String(row[0] || '').replace(/（[^）]*）/g, '');
+      var pv = '';
+      (t.headers || []).forEach(function(h, ci){
+        if (h && h.indexOf('元/斤') >= 0 && !pv && row[ci] != null){
+          pv = (typeof row[ci] === 'object' ? String(row[ci].t || '') : String(row[ci])).replace(/（[^）]*）/g, '');
+        }
+      });
+      if (nm && pv) parts.push(nm + ' ' + pv);
+    });
+    if (parts.length) fdTxt = '📦 冻品批发参考：' + parts.join('；') + ' 元/斤。';
+  });
+
+  var h = '';
+  if (st.hi != null){
+    var trendWord = st.up > st.down ? '整体偏强' : (st.down > st.up ? '整体走弱' : '基本平稳');
+    var advice = st.up > st.down ? '可按需分批采购，避免追高' : (st.down > st.up ? '可择低询价锁单，降低到货成本' : '按订单节奏均衡采购即可');
+    h += '<p>📊 ' + esc(titleShort) + '主力报价区间 <b>' + st.lo.toFixed(2) + '–' + st.hi.toFixed(2) + '</b> 元/斤' +
+      '（最高 ' + esc(st.hiName) + ' ' + st.hi.toFixed(2) + '，最低 ' + esc(st.loName) + ' ' + st.lo.toFixed(2) + '）；' +
+      '环比上涨 ' + st.up + ' 项、下落 ' + st.down + ' 项、持平 ' + st.flat + ' 项，' + trendWord + '。</p>' +
+      '<p>💡 ' + esc(advice) + '。</p>';
+  }
+  if (fdTxt) h += '<p>' + esc(fdTxt) + '</p>';
+  matched.forEach(function(b){
+    h += '<p><b>' + esc(b.h || '研判') + '</b></p><p>' + esc(b.p || b.text || '') + '</p>';
+  });
+  if (notice && (secName === '三黄鸡' || secName === '公鸡' || !matched.length)){
+    h += '<p class="notice-p">⚠️ ' + esc(notice.p || '') + '</p>';
+  }
+
+  if (!h) return '';
+  return '<div class="sec-foot"><div class="foot-t">🧭 本板块今日研判</div>' + h + '</div>';
+}
+
+/* ---------- 渲染 ---------- */
+/* 补齐四张速览卡：云端 data.json 只有3张（缺白羽），前端按白羽板块自动补齐 */
+function ensureCards(d){
+  var cards = d.trend_cards || [];
+  var has = cards.filter(function(tc){ return /白羽/.test(tc.name || ''); })[0];
+  if (has) return cards;
+  var sec = (d.sections || []).filter(function(s){ return /白羽/.test(s.tab || s.title || ''); })[0];
+  if (!sec) return cards;
+  var p = null, note = '山东棚前均价 · 低位可分批建仓';
+  (sec.tables || []).some(function(t){
+    return (t.rows || []).some(function(row){
+      var c0 = String(row[0] || '');
+      if (!/山东平均|全省|棚前均价|平均价/.test(c0)) return false;
+      var m = String(row[1] == null ? '' : (typeof row[1] === 'object' ? row[1].t : row[1])).match(/\d+(?:\.\d+)?/);
+      if (m){ p = m[0]; note = c0 + ' · 低位可分批建仓'; return true; }
+      return false;
+    });
+  });
+  // 没有「山东平均」这类汇总行时，取第一张表所有城市的均价（而不是只取第一行单市价）
+  if (p == null && sec.tables && sec.tables[0] && sec.tables[0].rows && sec.tables[0].rows.length){
+    var vals = [], t0 = sec.tables[0], label = t0.headers ? String(t0.headers[0]) : '';
+    t0.rows.forEach(function(row){
+      var raw = row[1] == null ? '' : (typeof row[1] === 'object' ? row[1].t : row[1]);
+      var nums = String(raw).match(/\d+(?:\.\d+)?/g);
+      if (!nums || !nums.length) return;
+      var lo = parseFloat(nums[0]);
+      var hi = nums.length > 1 ? parseFloat(nums[1]) : lo;
+      var v = (lo + hi) / 2;
+      if (v > 2.5 && v < 6) vals.push(v);   // 只统计合理区间，剔除鸡苗(元/羽)等
+    });
+    if (vals.length){
+      var avg = vals.reduce(function(a, b){ return a + b; }, 0) / vals.length;
+      p = avg.toFixed(2);
+      note = label + ' %d市均价'.replace('%d', vals.length) + ' · 低位可分批建仓';
+    }
+  }
+  if (p == null) return cards;
+  return cards.concat([{
+    name: '白羽肉鸡', price: p, unit: '元/斤', note: note,
+    chart: {
+      dates: [String((d.meta && d.meta.date_iso) || '').slice(5).replace('-', '/')],
+      series: [{name: '棚前均价', values: [p]}]
+    }
+  }]);
+}
+
+function render(){
+  var d = STATE.data;
+  var m = d.meta || {};
+  var hdt = (m.date_cn || '') + (m.weekday ? ' · ' + m.weekday : '');
+  if (m.update_time){
+    hdt += ' · ' + m.update_time + '更新';
+    // 源未出新价时明确提示，避免误以为没更新
+    if (m.data_stale && m.data_date){
+      hdt += '（行情源最新为 ' + m.data_date + '）';
+    }
+  }
+  $('hdDate').textContent = hdt;
+  d.trend_cards = ensureCards(d);
+  renderCards(d);
+  renderTabs(d);
+  renderSection(d, STATE.tab);
+  renderFavs(d);
+  renderNews(d);
+  $('foot').textContent = d.footer || '禽类采购工作台';
+}
+
+function renderCards(d){
+  var h = '';
+  (d.trend_cards || []).forEach(function(tc){
+    var ch = tc.chart || {};
+    var vals = (ch.series && ch.series[0] && ch.series[0].values) || [];
+    h += '<div class="scard"><div class="nm">' + esc(tc.name) + '</div>' +
+      '<div class="pr">' + esc(tc.price) + '<small> ' + esc((tc.unit||'').trim()) + '</small></div>' +
+      '<div class="cmp">' + trendTags(vals) + '</div>' +
+      sparkline(ch.dates || [], ch.series || []) +
+      '<div class="nt">' + esc(tc.note || '') + '</div></div>';
+  });
+  $('cards').innerHTML = h;
+}
+
+function renderNews(d){
+  var box = $('news');
+  var news = d.news || [];
+  if (!news.length){
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = '';
+  var h = '<div class="news-list">';
+  news.forEach(function(n){
+    var date = n.date || '';
+    h += '<a class="nitem" href="' + esc(n.url) + '" target="_blank" rel="noopener">' +
+      '<div class="ntop"><span class="ntitle">' + esc(n.title) + '</span>' +
+      (date ? '<span class="ndate">' + esc(date) + '</span>' : '') + '</div>' +
+      '<div class="nsrc">来源：' + esc(n.src || '鸡病专业网') + '</div></a>';
+  });
+  h += '</div>';
+  $('newsList').innerHTML = h;
+}
+
+function renderTabs(d){
+  var btns = '';
+  (d.sections || []).forEach(function(s, i){
+    var nm = s.tab || SECTIONS[i] ? (SECTIONS[i] && SECTIONS[i].name) || s.title.replace(/^[一二三四五六]、/, '').split(/[（(]/)[0] : '';
+    btns += '<button data-i="' + i + '" class="' + (i === STATE.tab ? 'on' : '') + '">' + esc(nm) + '</button>';
+  });
+  $('tabs').innerHTML = btns;
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function(b){
+    b.onclick = function(){ STATE.tab = +b.getAttribute('data-i'); renderTabs(d); renderSection(d, STATE.tab); window.scrollTo({top: 0, behavior: 'smooth'}); };
+  });
+}
+
+function renderSection(d, si){
+  var s = d.sections[si];
+  var box = $('content');
+  if (!s){ box.innerHTML = ''; return; }
+  var html = '';
+  if (s.type === 'final'){
+    html = '<div class="sec-title">' + esc(s.title) + '</div>';
+    (s.blocks || []).forEach(function(b){
+      html += '<div class="blk" style="border-left-color:var(--accent);background:#fffdf5"><b>' + esc(b.h||'') + '</b><p>' + esc(b.p||b.text||'') + '</p></div>';
+    });
+    box.innerHTML = html; return;
+  }
+  html = '<div class="sec-title">' + esc(s.title) + '</div>';
+  var a = s.analysis;
+  if (a){
+    html += '<div class="ana"><div class="a-t">' + esc(a.title || '') + '</div>' +
+      '<div class="a-up">' + (a.up || []).map(function(x){ return '· ' + esc(x) + '<br>'; }).join('') + '</div>' +
+      ((a.ref && a.ref.length) ? '<div class="a-ref">' + a.ref.map(function(x){ return '💡 ' + esc(x) + '<br>'; }).join('') + '</div>' : '') +
+      '</div>';
+  }
+  (s.tables || []).forEach(function(t, ti){
+    var cap = t.cap || '';
+    html += cap ? '<div class="tbl-cap">' + esc(cap) + '</div>' : '';
+    html += '<div class="tbl-wrap"><table><thead><tr>';
+    (t.headers || []).forEach(function(h){ html += '<th>' + esc(h) + '</th>'; });
+    html += '<th style="width:26px"></th></tr></thead><tbody>';
+    (t.rows || []).forEach(function(row, ri){
+      html += '<tr>';
+      row.forEach(function(c){ html += cellHtml(c); });
+      var key = rowKey(si, ti, ri);
+      var on = STATE.favs[key] ? 'on' : '';
+      html += '<td><button class="fav-btn ' + on + '" data-k="' + key + '">' + (on ? '★' : '☆') + '</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  /* 本板块研判：把综合研判里的对应块分发给各板块 */
+  html += sectionJudge(d, si);
+  box.innerHTML = html;
+  Array.prototype.forEach.call(box.querySelectorAll('.fav-btn'), function(b){
+    b.onclick = function(){
+      var k = b.getAttribute('data-k');
+      if (STATE.favs[k]){ delete STATE.favs[k]; b.textContent = '☆'; b.classList.remove('on'); }
+      else {
+        var p = k.split('-');
+        var s2 = d.sections[+p[0]];
+        var row = s2.tables[+p[1]].rows[+p[2]];
+        STATE.favs[k] = { txt: rowText(row).slice(0, 60), sec: +p[0] };
+        b.textContent = '★'; b.classList.add('on');
+      }
+      localStorage.setItem('qx_wb_favs', JSON.stringify(STATE.favs));
+      renderFavs(d);
+    };
+  });
+}
+
+function renderFavs(d){
+  var box = $('favs');
+  var keys = Object.keys(STATE.favs);
+  if (!keys.length){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  var h = '<div class="card-t"><span>⭐ 我的收藏（点击跳转）</span><span style="font-size:11px;cursor:pointer" id="favClear">清空</span></div>';
+  h += keys.map(function(k){
+    var f = STATE.favs[k];
+    return '<div class="fitem" data-k="' + k + '"><span class="ftag">' + esc(SECTIONS[f.sec] ? SECTIONS[f.sec].name : '') + '</span><span class="ftxt">' + esc(f.txt) + '</span><span class="x" data-x="' + k + '">✕</span></div>';
+  }).join('');
+  box.innerHTML = h;
+  Array.prototype.forEach.call(box.querySelectorAll('.fitem'), function(el){
+    el.onclick = function(){
+      var k = el.getAttribute('data-k');
+      STATE.tab = +k.split('-')[0];
+      renderTabs(d); renderSection(d, STATE.tab);
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('.x'), function(x){
+    x.onclick = function(ev){
+      ev.stopPropagation();
+      delete STATE.favs[x.getAttribute('data-x')];
+      localStorage.setItem('qx_wb_favs', JSON.stringify(STATE.favs));
+      renderFavs(d);
+    };
+  });
+  $('favClear').onclick = function(){ STATE.favs = {}; localStorage.setItem('qx_wb_favs', '{}'); renderFavs(d); };
+}
+
+/* ---------- 搜索 ---------- */
+var kwTimer = null;
+function toggleSearch(show){
+  var p = $('searchPanel');
+  var ic = $('hdSearch');
+  if (show === undefined) show = !p.classList.contains('open');
+  if (show){ p.classList.add('open'); ic.textContent = '✕'; ic.classList.add('active'); setTimeout(function(){ $('kw').focus(); }, 50); }
+  else { p.classList.remove('open'); ic.textContent = '🔍'; ic.classList.remove('active'); $('kw').value = ''; }
+}
+$('hdSearch').onclick = function(){ toggleSearch(); };
+$('kw').addEventListener('input', function(){
+  clearTimeout(kwTimer);
+  kwTimer = setTimeout(function(){ doSearch(); }, 250);
+});
+$('kw').addEventListener('focus', function(){ $('searchPanel').classList.add('open'); });
+function doSearch(){
+  var q = $('kw').value.trim().toLowerCase();
+  if (!q){ renderSection(STATE.data, STATE.tab); return; }
+  var d = STATE.data, found = [];
+  (d.sections || []).forEach(function(s, si){
+    (s.tables || []).forEach(function(t, ti){
+      (t.rows || []).forEach(function(row, ri){
+        var txt = rowText(row).toLowerCase();
+        if (txt.indexOf(q) >= 0) found.push({ si: si, ti: ti, ri: ri, row: row });
+      });
+    });
+  });
+  var box = $('content');
+  if (!found.length){ box.innerHTML = '<div class="sec-title">🔍 无匹配</div>'; return; }
+  var h = '<div class="sec-title">🔍 找到 ' + found.length + ' 条</div><div class="res">';
+  found.forEach(function(f){
+    var nm = (d.sections[f.si].tab || SECTIONS[f.si].name || '');
+    h += '<div class="ritem" data-k="' + f.si + '"><span class="rtag">' + esc(nm) + '</span>' +
+      f.row.map(function(c){ var t = typeof c === 'object' ? c.t : String(c); var i = t.toLowerCase().indexOf(q); if (i >= 0){ return esc(t.slice(0,i)) + '<span class="hl">' + esc(t.slice(i, i+q.length)) + '</span>' + esc(t.slice(i+q.length)); } return esc(t); }).join('　') +
+      '</div>';
+  });
+  h += '</div>';
+  box.innerHTML = h;
+  Array.prototype.forEach.call(box.querySelectorAll('.ritem'), function(el){
+    el.onclick = function(){ STATE.tab = +el.getAttribute('data-k'); renderTabs(STATE.data); renderSection(STATE.data, STATE.tab); toggleSearch(false); };
+  });
+}
+$('refreshBtn').onclick = function(){ load(true); };
+
+/* ---------- 加载数据（多源回退：国内 raw.githubusercontent 常不通） ---------- */
+var REMOTE = 'https://raw.githubusercontent.com/AI-cloudo/-qinxing-daily-/main/data.json';
+var SOURCES = [
+  'https://ai-cloudo.github.io/-qinxing-daily-/data.json',
+  'https://cdn.jsdelivr.net/gh/AI-cloudo/-qinxing-daily-@main/data.json',
+  'https://raw.githubusercontent.com/AI-cloudo/-qinxing-daily-/main/data.json'
+];
+function load(manual){ trySrc(0, manual); }
+
+function trySrc(i, manual){
+  if (i >= SOURCES.length){
+    if (manual) toast('云端暂不可达，当前为缓存数据');
+    return;
+  }
+  fetch(SOURCES[i] + '?t=' + Date.now(), {cache: 'no-store'})
+    .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+    .then(function(j){
+      var oldDate = STATE.data && STATE.data.meta && STATE.data.meta.date_iso;
+      STATE.data = j; STATE.src = 'live'; setBadge();
+      if (manual){ render(); toast('已更新到最新数据'); }
+      else if (!STATE._loaded){ render(); }
+      else if (j.meta && j.meta.date_iso !== oldDate){ render(); toast('检测到新数据，已自动刷新'); }
+      STATE._loaded = true;
+    })
+    .catch(function(){
+      trySrc(i + 1, manual);   // 换下一个源重试
+    });
+}
+/* 初始：快照立即渲染，随后尝试拉取云端最新 */
+(function init(){
+  STATE.data = SNAPSHOT; STATE.src = 'snap'; setBadge();
+  render();
+  load(false);
+  setInterval(function(){ load(false); }, 120000);
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) load(false);
+  });
+})();
+</script>
+</body>
+</html>
