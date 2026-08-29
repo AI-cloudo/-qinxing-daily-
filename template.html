@@ -558,7 +558,7 @@ function doSearch(){
     el.onclick = function(){ STATE.tab = +el.getAttribute('data-k'); renderTabs(STATE.data); renderSection(STATE.data, STATE.tab); toggleSearch(false); };
   });
 }
-$('refreshBtn').onclick = function(){ load(true); };
+$('refreshBtn').onclick = function(){ load(true); checkSelfUpdate(false); };
 
 /* ---------- 加载数据（多源回退：国内 raw.githubusercontent 常不通） ---------- */
 var REMOTE = 'https://raw.githubusercontent.com/AI-cloudo/-qinxing-daily-/main/data.json';
@@ -588,14 +588,31 @@ function trySrc(i, manual){
       trySrc(i + 1, manual);   // 换下一个源重试
     });
 }
+/* ---------- 页面自我更新：摆脱手机浏览器缓存，保证拿到最新版页面 ---------- */
+var BUILD = /*__BUILD_ID__*/"dev";
+function checkSelfUpdate(manual){
+  fetch(location.href.split('#')[0] + (location.search ? '&' : '?') + '_cb=' + Date.now(), {cache: 'no-store'})
+    .then(function(r){ if(!r.ok) throw 0; return r.text(); })
+    .then(function(t){
+      var m = t.match(/var BUILD\s*=\s*"([^"]+)"/);
+      if (m && m[1] !== BUILD){
+        try { location.reload(true); } catch(e){ location.reload(); }
+      } else if (manual){
+        toast('已是最新版本');
+      }
+    })
+    .catch(function(){ if (manual) toast('无法检查更新'); });
+}
+
 /* 初始：快照立即渲染，随后尝试拉取云端最新 */
 (function init(){
   STATE.data = SNAPSHOT; STATE.src = 'snap'; setBadge();
   render();
   load(false);
   setInterval(function(){ load(false); }, 120000);
+  setInterval(function(){ checkSelfUpdate(false); }, 600000);   // 每10分钟查一次新页面
   document.addEventListener('visibilitychange', function(){
-    if (!document.hidden) load(false);
+    if (!document.hidden){ load(false); checkSelfUpdate(false); }
   });
 })();
 </script>
