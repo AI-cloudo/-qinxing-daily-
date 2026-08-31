@@ -20,8 +20,13 @@ UA = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) Appl
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def fetch(url, timeout=20):
-    req = urllib.request.Request(url, headers=UA)
+# 桌面 UA：网易搜索页对移动端 UA 只返回 JS 空壳（约50KB），桌面端才有明文结果（约300KB）
+PC_UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+
+
+def fetch(url, timeout=20, headers=None):
+    req = urllib.request.Request(url, headers=headers or UA)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read().decode("utf-8", errors="ignore")
 
@@ -290,16 +295,76 @@ NCB_SEEDS = ["L5C669FL0514E1NL"]     # 已知的一期「全国鸡价」，据�
 FAST_BREEDS = ("快大三黄鸡", "快大三黄", "肉杂鸡", "雪原林鸡", "青脚麻公鸡",
                "青麻公鸡", "麻公鸡", "黄花公鸡", "黄花公", "铁脚麻公",
                "青脚麻混鸡", "青脚麻公")
+def _flex(name):
+    """品种名容错：正文里「青脚麻 公鸡」这类被换行/标签拆开的名字也要能匹配上"""
+    return r"\s*".join(re.escape(c) for c in name)
+
+
+# 价格区间分隔符要含全角波浪号～（正文常用 4.0～4.4），否则整条价格匹配失败
 NCB_BREED_RE = re.compile(
-    r"(" + "|".join(FAST_BREEDS) + r")[:：]\s*([\d.]+(?:[~\-－—][\d.]+)?)\s*元\s*/\s*斤")
+    r"(" + "|".join(_flex(b) for b in FAST_BREEDS) + r")\s*[:：]\s*"
+    r"([\d.]+(?:[~\～\-－—][\d.]+)?)\s*元\s*/\s*斤")
 NCB_PROV_RE = re.compile(
     r"(浙江|江西|福建|湖南|湖北|广东|粤东|江苏|安徽|山东|四川|重庆|贵州|"
     r"云南|广西|河南|河北|辽宁|吉林|黑龙江|山西|陕西)[^。\n]{0,16}?"
     r"(?:鸡价|肉鸡价格|肉鸡行情|区域价格|地区价格|区域肉鸡|地区肉鸡|肉鸡)")
 
 
+NCB_SEARCH = "https://www.163.com/search?keyword=%E5%85%A8%E5%9B%BD%E9%B8%A1%E4%BB%B7"
+# 搜索页正文里的三元组：文章URL,,'标题','', '封面图URL'（封面图路径含 /YYYY/MMDD/，用来判年份）
+NCB_SEARCH_RE = re.compile(
+    r"/dy/article/([A-Z0-9]{15,20})\.html[^']*','([^']*?(\d{1,2})月(\d{1,2})日全国鸡价"
+    r"[^']*)','','([^']*)'")       # 组2=完整标题（含日期，下游要靠它取数据日期）
+
+
+def ncb_discover():
+    """网易站内搜索发现「全国鸡价」各期。
+
+    推荐位扩散只能顺着文章往回捞，常常漏掉最新一期（实测停在旧期一两天）。
+    搜索页 HTML 里标题是明文的，直接解析更稳，作为发现最新期的首选通道。
+    """
+    out, seen = [], set()
+    # 搜索页偶发返回 JS 空壳（约50KB、无结果），重试到拿到有效结果为止
+    h = ""
+    for i in range(3):
+        try:
+            t = fetch(NCB_SEARCH, timeout=25, headers=PC_UA)
+        except Exception as e:
+            print("[warn] 农财宝典搜索失败(%d): %s" % (i + 1, e))
+            continue
+        if len(t) > len(h):
+            h = t
+        if "全国鸡价" in h and len(h) > 100000:
+            break
+    if not h:
+        return out
+    for m in NCB_SEARCH_RE.finditer(h):
+        aid, title, mo, dd, img = m.groups()
+        if aid in seen:
+            continue
+        ym = re.search(r"/(20\d{2})/", img) or re.search(r"(20\d{2})", img)
+        year = int(ym.group(1)) if ym else 0
+        seen.add(aid)
+        out.append(((year, int(mo), int(dd)), aid, title))
+    return out
+
+
 def ncb_latest(seed_ids):
-    """从种子文章的相关推荐里扩散，收集所有「全国鸡价」并取日期最新的一期"""
+    """取最新一期「全国鸡价」：先走站内搜索，搜不到再退回推荐位扩散"""
+    now = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+    # 通道一：站内搜索（最新期最全）
+    cands = [c for c in ncb_discover() if c[0][0] == 0 or c[0][0] == now.year]
+    cands.sort(key=lambda x: x[0], reverse=True)
+    for key, aid, title in cands[:5]:
+        try:
+            h = fetch(NCB_ART % aid, timeout=15)
+        except Exception:
+            continue
+        if "全国鸡价" in title or "全国鸡价" in h:
+            print("[ncb] 搜索命中 %d/%d %s" % (key[1], key[2], aid))
+            return aid, title, h
+
+    # 通道二：种子文章的相关推荐扩散
     found, tried, frontier = [], set(), list(seed_ids)
     for _ in range(2):          # 最多向外扩展两层
         nxt = []
@@ -341,8 +406,8 @@ def parse_ncb_chicken(html):
     for i, (pos, prov) in enumerate(marks):
         seg = txt[pos:(marks[i + 1][0] if i + 1 < len(marks) else len(txt))]
         for m in NCB_BREED_RE.finditer(seg):
-            breed = m.group(1)
-            price = m.group(2).replace("~", "-").replace("－", "-").replace("—", "-")
+            breed = re.sub(r"\s+", "", m.group(1))     # 「青脚麻 公鸡」→「青脚麻公鸡」
+            price = re.sub(r"[~\～－—]", "-", m.group(2))
             key = (prov, breed)
             if key in seen:
                 continue
@@ -960,13 +1025,22 @@ def main():
     try:
         bj = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
         d["meta"]["update_time"] = bj.strftime("%m-%d %H:%M")
-        # 各板块实际数据日期汇总（取最旧的一个，提示哪些板块是沿用数据）
+        # 各板块实际数据日期：算跨度（最旧~最新）。
+        # 注意：不能只取最旧值——各板块 tag 已各自标注日期，顶部若报单一「最旧」日期
+        # 会和多数板块冲突且语义歧义。顶部只负责说明「日期不一致」这件事本身。
         tags = [s.get("tag", "") for s in d.get("sections", [])]
         data_dates = re.findall(r"(\d+)/(\d+)", " ".join(tags))
         if data_dates:
-            old = min(data_dates, key=lambda x: (int(x[0]), int(x[1])))
-            d["meta"]["data_date"] = "%d/%d" % (int(old[0]), int(old[1]))
-            if d["meta"]["data_date"] != "%d/%d" % (bj.month, bj.day):
+            uniq = sorted(set((int(a), int(b)) for a, b in data_dates))
+            oldest, newest = uniq[0], uniq[-1]
+            today_md = (bj.month, bj.day)
+            d["meta"].pop("data_date", None)          # 废弃字段，避免前端误读
+            if oldest == newest:
+                d["meta"]["data_span"] = ""           # 全部同日，各板块 tag 已标注，顶部不再重复
+                d["meta"]["data_stale"] = (oldest != today_md)
+            else:
+                d["meta"]["data_span"] = "%d/%d~%d/%d" % (oldest[0], oldest[1],
+                                                          newest[0], newest[1])
                 d["meta"]["data_stale"] = True
     except Exception as e:
         print("[warn] 更新时间写入失败:", e)
