@@ -369,9 +369,9 @@ function render(){
   var hdt = (m.date_cn || '') + (m.weekday ? ' · ' + m.weekday : '');
   if (m.update_time){
     hdt += ' · ' + m.update_time + '更新';
-    // 源未出新价时明确提示，避免误以为没更新
-    if (m.data_stale && m.data_date){
-      hdt += '（行情源最新为 ' + m.data_date + '）';
+    // 各板块 tag 已各自标注源日期；顶部只在板块间日期不一致时说明跨度，避免和板块标注打架
+    if (m.data_stale && m.data_span){
+      hdt += '（板块数据 ' + m.data_span + '）';
     }
   }
   $('hdDate').textContent = hdt;
