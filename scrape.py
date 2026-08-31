@@ -282,6 +282,77 @@ def backfill_broiler_history(arts, days=7):
 
 MYSTEEL_BY = "https://www.mysteel.com/hot/1667520.html"   # 我的钢铁网·鸡业·2026年白羽肉鸡行情
 
+# ===== 三黄鸡（冻品快大类）数据源：网易·农财宝典畜牧版「全国鸡价」日报 =====
+NCB_ART = "https://www.163.com/dy/article/%s.html"
+NCB_SEEDS = ["L5C669FL0514E1NL"]     # 已知的一期「全国鸡价」，据此顺藤摸瓜找更新一期
+
+# 冻品流通的快大类品种（三黄鸡口径），慢速类(项鸡/阉鸡/竹丝鸡等)一律排除
+FAST_BREEDS = ("快大三黄鸡", "快大三黄", "肉杂鸡", "雪原林鸡", "青脚麻公鸡",
+               "青麻公鸡", "麻公鸡", "黄花公鸡", "黄花公", "铁脚麻公",
+               "青脚麻混鸡", "青脚麻公")
+NCB_BREED_RE = re.compile(
+    r"(" + "|".join(FAST_BREEDS) + r")[:：]\s*([\d.]+(?:[~\-－—][\d.]+)?)\s*元\s*/\s*斤")
+NCB_PROV_RE = re.compile(
+    r"(浙江|江西|福建|湖南|湖北|广东|粤东|江苏|安徽|山东|四川|重庆|贵州|"
+    r"云南|广西|河南|河北|辽宁|吉林|黑龙江|山西|陕西)[^。\n]{0,16}?"
+    r"(?:鸡价|肉鸡价格|肉鸡行情|区域价格|地区价格|区域肉鸡|地区肉鸡|肉鸡)")
+
+
+def ncb_latest(seed_ids):
+    """从种子文章的相关推荐里扩散，收集所有「全国鸡价」并取日期最新的一期"""
+    found, tried, frontier = [], set(), list(seed_ids)
+    for _ in range(2):          # 最多向外扩展两层
+        nxt = []
+        for aid in frontier:
+            if aid in tried:
+                continue
+            tried.add(aid)
+            try:
+                h = fetch(NCB_ART % aid, timeout=15)
+            except Exception:
+                continue
+            tm = re.search(r"<title>([^<]*)</title>", h)
+            title = tm.group(1) if tm else ""
+            if "全国鸡价" in title:
+                dm = re.search(r"(\d+)月(\d+)日", title)
+                key = (int(dm.group(1)), int(dm.group(2))) if dm else (0, 0)
+                found.append((key, aid, title, h))
+            nxt.extend(x for x in re.findall(r"(L[A-Z0-9]{15,20})", h) if x not in tried)
+        frontier = nxt[:8]
+        if not frontier:
+            break
+    if not found:
+        return None, "", None
+    found.sort(key=lambda x: x[0], reverse=True)
+    _, aid, title, html = found[0]
+    return aid, title, html
+
+
+def parse_ncb_chicken(html):
+    """全国鸡价日报 → [{prov, breed, price}]，只取冻品快大类"""
+    txt = re.sub(r"<script.*?</script>|<style.*?</style>", "", html, flags=re.S)
+    txt = re.sub(r"<[^>]+>", " ", txt)
+    # 换行一律转空格：正文里「湖北」与「鸡价稳定」常被换行断开，不合并会漏掉整个省份
+    txt = re.sub(r"\s+", " ", txt)
+    marks = [(m.start(), m.group(1)) for m in NCB_PROV_RE.finditer(txt)]
+    if not marks:
+        return []
+    out, seen = [], set()
+    for i, (pos, prov) in enumerate(marks):
+        seg = txt[pos:(marks[i + 1][0] if i + 1 < len(marks) else len(txt))]
+        for m in NCB_BREED_RE.finditer(seg):
+            breed = m.group(1)
+            price = m.group(2).replace("~", "-").replace("－", "-").replace("—", "-")
+            key = (prov, breed)
+            if key in seen:
+                continue
+            seen.add(key)
+            lo = float(re.split(r"[-]", price)[0])
+            if not (3.0 <= lo <= 7.0):      # 快大类合理区间
+                continue
+            out.append({"prov": prov, "breed": breed, "price": price})
+    return out
+
 
 def parse_mysteel_broiler(html):
     """我的钢铁网（Mysteel 钢联）白羽肉鸡分市场报价
@@ -395,6 +466,8 @@ def main():
                 state = json.load(f)
         except Exception:
             state = {}
+
+    new_state = {}          # 各板块按需写入，最后统一落盘 state.json
 
     arts = collect_articles()
     print("共发现文章链接 %d 篇" % len(arts))
@@ -751,6 +824,85 @@ def main():
         sec["tag"] = ("口径：快大类前端活禽=冻品三黄鸡成本基准。817肉杂为当日云端抓取（%s）；"
                       "快大三黄各省价沿用%s AI校准数据；两者均为快大类，可互相印证。" % (d817, prev_date))
 
+    # ===== 板块三补充：网易·农财宝典「全国鸡价」日报 → 三黄鸡快大类分省价 =====
+    seeds = list(NCB_SEEDS)
+    if state.get("ncb_seed") and state["ncb_seed"] not in seeds:
+        seeds.insert(0, state["ncb_seed"])
+    try:
+        ncb_aid, ncb_title, ncb_html = ncb_latest(seeds)
+    except Exception as e:
+        print("[warn] 农财宝典抓取失败:", e)
+        ncb_aid, ncb_html = None, None
+    ncb_date = ""
+    if ncb_aid and ncb_html:
+        new_state["ncb_seed"] = ncb_aid          # 记住最新一期，明天从它继续往前找
+        dm = re.search(r"(\d+)月(\d+)日", ncb_title or "")
+        ncb_date = "%s/%s" % (dm.group(1), dm.group(2)) if dm else ""
+        rows = parse_ncb_chicken(ncb_html)
+        print("农财宝典全国鸡价(%s): %d 个快大类报价" % (ncb_date, len(rows)))
+        if rows:
+            prev_sh = state.get("sanhuang", {})
+            tbl = []
+            for r in rows:
+                lo = float(re.split(r"-", r["price"])[0])
+                pv = prev_sh.get(r["prov"])
+                if pv is None:
+                    cell = {"t": "→", "dir": "flat"}
+                else:
+                    cell = trend_cell(lo, pv)
+                tbl.append([r["prov"], r["breed"], {"t": r["price"], "dir": cell["dir"]},
+                            cell, "农财宝典 " + ncb_date])
+            sec = d["sections"][2]
+            keep = [t for t in sec.get("tables", []) if t["headers"][0] != "省份/地区"]
+            sec["tables"] = [{
+                "cap": "冻品流通三黄鸡·快大类活禽出栏价（元/斤）· 数据源：网易农财宝典畜牧版「全国鸡价」日报",
+                "headers": ["省份/地区", "冻品流通品种（快大类）", "出栏价（元/斤）", "环比", "数据来源"],
+                "rows": tbl
+            }] + keep
+            new_state["sanhuang"] = {r["prov"]: float(re.split(r"-", r["price"])[0]) for r in rows}
+            sec["tag"] = ("快大类分省价 %s 云端抓取（农财宝典）；817肉杂同日抓取（%s）。"
+                          "慢速类(项鸡/阉鸡/竹丝鸡)见下方参考表，非冻品主渠道。" % (ncb_date, d817))
+            print("三黄鸡主表更新: %d 行" % len(tbl))
+
+            # 同步维护三黄鸡速览卡（口径：主表快大类均价），并累积历史供趋势使用
+            mids = []
+            for r in rows:
+                parts = [float(x) for x in re.split(r"-", r["price"]) if x]
+                mids.append(sum(parts) / len(parts))
+            sh_avg = round(sum(mids) / len(mids), 2)
+            cards = d.setdefault("trend_cards", [])
+            sh = None
+            for c in cards:
+                if "三黄" in (c.get("name") or ""):
+                    sh = c
+                    break
+            if sh is None:
+                sh = {"name": "三黄鸡", "unit": "元/斤",
+                      "chart": {"dates": [], "series": [{"name": "快大类出栏均价", "values": []}]}}
+                cards.append(sh)
+            ch = sh.setdefault("chart", {})
+            ch.setdefault("dates", [])
+            if not ch.get("series"):
+                ch["series"] = [{"name": "快大类出栏均价", "values": []}]
+            ch["series"][0].setdefault("values", [])
+            md = "%d/%d" % (today.month, today.day)
+            if ch["dates"] and ch["dates"][-1] == md:
+                ch["series"][0]["values"][-1] = sh_avg
+            else:
+                ch["dates"].append(md)
+                ch["series"][0]["values"].append(sh_avg)
+                if len(ch["dates"]) > 10:
+                    ch["dates"] = ch["dates"][-10:]
+                    ch["series"][0]["values"] = ch["series"][0]["values"][-10:]
+            sh["price"] = fmt(sh_avg)
+            sh["note"] = ("冻品流通口径·快大类活禽出栏：%d省均价 %s 元/斤（区间 %s-%s）；"
+                          "数据源：农财宝典全国鸡价 %s。注意：三黄项/矮脚黄项 7.6-8.5 为活禽鲜销，"
+                          "非冻品渠道，勿按此价核算"
+                          % (len(rows), fmt(sh_avg), fmt(min(mids)), fmt(max(mids)), ncb_date))
+            print("三黄鸡速览卡: %s 元/斤，历史 %d 天" % (sh["price"], len(ch["dates"])))
+    else:
+        print("农财宝典: 未找到全国鸡价文章，沿用原有数据")
+
     # ===== 板块六：规则研判 =====
     tips = []
     if cull_by_prov:
@@ -822,11 +974,15 @@ def main():
                    "手机页面每2分钟自动检查新版" % (date_cn, weekday))
 
     # ===== 保存 =====
-    new_state = {
-        "date": today.isoformat(),
-        "cull": {p: round(sum(v) / len(v), 2) for p, v in cull_by_prov.items()} if cull_by_prov else state.get("cull", {}),
-        "egg": egg_avg if egg_by_prov else state.get("egg", {}),
-    }
+    # new_state 在上方各板块里逐步填充（如 ncb_seed / sanhuang），这里补齐基础字段
+    new_state.setdefault("date", today.isoformat())
+    new_state.setdefault(
+        "cull", {p: round(sum(v) / len(v), 2) for p, v in cull_by_prov.items()} if cull_by_prov else state.get("cull", {}))
+    new_state.setdefault("egg", egg_avg if egg_by_prov else state.get("egg", {}))
+    if "sanhuang" not in new_state:
+        new_state["sanhuang"] = state.get("sanhuang", {})
+    if "ncb_seed" not in new_state:
+        new_state["ncb_seed"] = state.get("ncb_seed", NCB_SEEDS[0])
     with open(os.path.join(HERE, "data.json"), "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
     with open(state_path, "w", encoding="utf-8") as f:
