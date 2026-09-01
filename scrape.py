@@ -1216,8 +1216,12 @@ def main():
                               - datetime.date(nyear, newest[0], newest[1])).days
             except ValueError:
                 stale_days = 0
+            # 最旧板块日期（ISO）——供前端多源择优排序：报告里最旧的一天越新，整体越新鲜
+            oyear = bj.year if oldest <= today_md else bj.year - 1
+            d["meta"]["oldest_date"] = "%04d-%02d-%02d" % (oyear, oldest[0], oldest[1])
     except Exception as e:
         print("[warn] 更新时间写入失败:", e)
+        d["meta"].setdefault("content_date", today.isoformat())
     d["footer"] = ("云端自动更新 · 数据源：鸡病专业网 jbzyw.com / mffb.com.cn · 页面生成 %s %s · "
                    "手机页面每2分钟自动检查新版" % (date_cn, weekday))
 
