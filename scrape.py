@@ -328,12 +328,72 @@ NCB_SEARCH_RE = re.compile(
     r"/dy/article/([A-Z0-9]{15,20})\.html[^']*','([^']*?(\d{1,2})月(\d{1,2})日全国鸡价"
     r"[^']*)','','([^']*)'")       # 组2=完整标题（含日期，下游要靠它取数据日期）
 
+# 【首选发现通道】网易财经「鸡价」关键词聚合页：纯静态、列出农财宝典各期及日期。
+# 2026-09-01 起 www.163.com/search 改版为 JS 渲染（只回 50KB 空壳，搜不出结果），
+# 该聚合页仍是静态 HTML，实测可稳定取到最新一期，故提升为首选。
+NCB_KEYWORD = "https://money.163.com/keywords/9/2/9e214ef7/1.html"
+# 块结构：<div class="keyword_new ..."> <div class="keyword_img">封面图</div>
+#         <h3><a href="/dy/article/{ID}.html">标题</a></h3>
+#         <div class="keyword_other">...<div class="keyword_source">农财宝典畜牧版 2026-08-31</div>
+# 边界用「下一个块起点或文末」的前瞻，不能用固定 </div> 收尾（块内嵌套层数不固定）
+NCB_KW_BLOCK_RE = re.compile(r'<div class="keyword_new[^"]*"[^>]*>(.*?)(?=<div class="keyword_new|\Z)', re.S)
+NCB_KW_AID_RE = re.compile(r"/dy/article/([A-Z0-9]{15,20})\.html")
+NCB_KW_TITLE_RE = re.compile(r"<h3>\s*<a[^>]*>([^<]{5,90})</a>")
+# keyword_source 里是「来源 2026-08-31」完整日期，最可靠
+NCB_KW_SRC_RE = re.compile(r'class="keyword_source">\s*([^<]*?)\s*(20\d{2})-(\d{1,2})-(\d{1,2})')
+# 兜底：封面图 URL 里有 URL 编码的 /YYYY/MMDD/
+NCB_KW_DATE_RE = re.compile(r"(20\d{2})%2F(\d{4})%2F|(20\d{2})/(\d{4})/")
 
-def ncb_discover():
-    """网易站内搜索发现「全国鸡价」各期。
 
-    推荐位扩散只能顺着文章往回捞，常常漏掉最新一期（实测停在旧期一两天）。
-    搜索页 HTML 里标题是明文的，直接解析更稳，作为发现最新期的首选通道。
+def ncb_discover_keyword():
+    """从网易财经「鸡价」关键词聚合页取各期列表（首选通道）。
+
+    返回 [( (年,月,日), 文章ID, 标题 ), ...]，只保留标题含「全国鸡价」的条目。
+    """
+    out, seen = [], set()
+    try:
+        h = fetch(NCB_KEYWORD, timeout=25, headers=PC_UA)
+    except Exception as e:
+        print("[warn] 农财宝典关键词页失败:", e)
+        return out
+    if h.count("全国鸡价") < 3:          # 页面改版/被挡时命中数会骤降
+        print("[warn] 农财宝典关键词页疑似改版，命中%d处" % h.count("全国鸡价"))
+        return out
+    for blk in NCB_KW_BLOCK_RE.finditer(h):
+        seg = blk.group(1)
+        am = NCB_KW_AID_RE.search(seg)
+        if not am:
+            continue
+        aid = am.group(1)
+        if aid in seen:
+            continue
+        tm = NCB_KW_TITLE_RE.search(seg)
+        title = (tm.group(1).strip() if tm else "")
+        if "全国鸡价" not in title:
+            continue
+        dm = re.search(r"(\d{1,2})月(\d{1,2})日", title)
+        sm = NCB_KW_SRC_RE.search(seg)
+        if sm:                             # 优先用来源行的完整日期
+            year, mo, dd = int(sm.group(2)), int(sm.group(3)), int(sm.group(4))
+        elif dm:
+            im = NCB_KW_DATE_RE.search(seg)
+            if im:
+                year = int(im.group(1) or im.group(3))
+                mdy = im.group(2) or im.group(4)
+                mo, dd = int(mdy[:2]), int(mdy[2:])
+            else:                          # 拿不到年份就用标题里的月日，年份留 0
+                year, mo, dd = 0, int(dm.group(1)), int(dm.group(2))
+        else:
+            continue
+        seen.add(aid)
+        out.append(((year, mo, dd), aid, title))
+    return out
+
+
+def ncb_discover_search():
+    """网易站内搜索发现「全国鸡价」各期（备用通道）。
+
+    2026-09-01 起搜索页改为 JS 渲染，多数时候只返回空壳，命中为空属正常。
     """
     out, seen = [], set()
     # 搜索页偶发返回 JS 空壳（约50KB、无结果），重试到拿到有效结果为止
@@ -358,6 +418,16 @@ def ncb_discover():
         year = int(ym.group(1)) if ym else 0
         seen.add(aid)
         out.append(((year, int(mo), int(dd)), aid, title))
+    return out
+
+
+def ncb_discover():
+    """发现「全国鸡价」各期：关键词聚合页优先，站内搜索兜底。"""
+    out = ncb_discover_keyword()
+    if not out:
+        out = ncb_discover_search()
+        if out:
+            print("[info] 关键词页无结果，站内搜索兜底命中 %d 期" % len(out))
     return out
 
 
