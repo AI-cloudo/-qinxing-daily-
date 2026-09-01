@@ -3,10 +3,13 @@ name: 每日禽类行情云端更新
 on:
   schedule:
     # GitHub 用世界标准时(UTC)：北京时间 = UTC + 8
-    # 23:30 UTC = 北京 07:30 —— 首跑，8 点前页面已是最新一次抓取结果
-    # 01:30 UTC = 北京 09:30 —— 补跑，行情站多在 8-9 点才发当日文章，此时才抓得到当天真实数据
-    - cron: '30 23 * * *'
-    - cron: '30 1 * * *'
+    # 00:00 UTC = 北京 08:00 —— 首跑，上班前页面已是最新一次抓取结果
+    # 01:00 UTC = 北京 09:00 —— 补跑，行情站多在 8-9 点才发当日文章，此时才抓得到当天真实数据
+    # 02:00 UTC = 北京 10:00 —— 保底跑，周末/节假日源发文更慢，做最后一次兜底
+    # 说明：GitHub Actions 排队通常有 3-15 分钟延迟，实际运行时间会比整点晚几分钟，属正常
+    - cron: '0 0 * * *'
+    - cron: '0 1 * * *'
+    - cron: '0 2 * * *'
   workflow_dispatch: {}   # 允许手动触发
 
 permissions:
@@ -33,10 +36,43 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 抓取行情与新闻，并把当日数据烘进页面快照
+      - name: 抓取行情与新闻（数据滞后时自动等待重抓）
+        # scrape.py 在 REQUIRE_FRESH=1 下，若抓到的最新板块日期比今天早 >=2 天，
+        # 说明新一期没抓到（源站漏抓/解析失败），以退出码 3 告知这里等待后重跑。
+        # 滞后 1 天属正常（凌晨或周末源尚未发文），不会触发重抓，免得空等。
         run: |
-          python scrape.py
-          python build.py
+          set +e
+          for i in 1 2 3; do
+            echo "===== 第 $i 轮抓取 · 北京时间 $(TZ=Asia/Shanghai date +'%H:%M') ====="
+            REQUIRE_FRESH=1 python scrape.py
+            code=$?
+            if [ $code -eq 0 ]; then
+              echo ">>> 已是源站最新一期，停止重试"
+              break
+            fi
+            echo ">>> 退出码 $code（3 = 数据明显滞后，其他 = 脚本异常）"
+            if [ $i -lt 3 ]; then
+              echo ">>> 等待 6 分钟后重抓"
+              sleep 360
+            fi
+          done
+          set -e
+          echo ">>> 抓取流程结束，开始构建页面"
+
+      - name: 把当日数据烘进页面快照
+        run: python build.py
+
+      - name: 输出各板块数据日期（便于排查滞后来源）
+        run: |
+          python - <<'PY'
+          import json
+          d = json.load(open('data.json', encoding='utf-8'))
+          m = d.get('meta', {})
+          print('更新时间 :', m.get('update_time'))
+          print('日期跨度 :', m.get('data_span') or '各板块同日')
+          for s in d.get('sections', []):
+              print('  - %-8s %s' % (s.get('title', '')[:8], s.get('tag', '')))
+          PY
 
       - name: 把最新数据与页面提交回仓库（作为明天的环比基准）
         run: |
