@@ -194,6 +194,18 @@ MFFB_CITIES = [
 ]
 
 
+def title_date(title):
+    """从文章标题里抠出数据日期，统一返回 'M/D'；抠不出返回 ''。
+    兼容：2026.08.28鸡价行情 / 2026年8月28日鸡蛋价格行情 / 8月28日…"""
+    m = re.search(r"(\d{4})\s*[.\-年/]\s*(\d{1,2})\s*[.\-月/]\s*(\d{1,2})", title or "")
+    if m:
+        return "%d/%d" % (int(m.group(2)), int(m.group(3)))
+    m = re.search(r"(\d{1,2})\s*月\s*(\d{1,2})\s*日", title or "")
+    if m:
+        return "%d/%d" % (int(m.group(1)), int(m.group(2)))
+    return ""
+
+
 def mffb_latest(keyword):
     """从 mffb 首页找当天标题含 keyword 的最新文章，返回 (url, title)"""
     home = None
@@ -735,9 +747,25 @@ def main():
                         dr, txt = "up", "+" + (r["amt"] or "")
                     rows.append([r["region"], r["city"], {"t": r["price"], "dir": dr},
                                  {"t": txt, "dir": dr}])
-            sec["tables"] = keep + [{"headers": ["产区", "城市", "棚前价（元/斤）", "当日涨跌"], "rows": rows}]
+            # mffb 常在周末/节假日停更，抓到的可能是几天前那一期。日期必须标出来，
+            # 否则这张「分产区棚前价」表会被当成当日行情读。
+            jz_date = title_date(mffb_jz_title)
+            jz_lag = 0
+            if jz_date:
+                mm, dd = jz_date.split("/")
+                try:
+                    jz_lag = max(0, (today - datetime.date(today.year, int(mm), int(dd))).days)
+                except ValueError:
+                    jz_lag = 0
+            sec["tables"] = keep + [{
+                "headers": ["产区", "城市", "棚前价（元/斤）", "当日涨跌"], "rows": rows,
+                "cap": "mffb 各产区棚前价%s · 每产区前 5 市" % ((" " + jz_date) if jz_date else ""),
+            }]
             down_n = sum(1 for r in mffb_jz if r["chg"] == "下滑")
-            sec["tag"] = "%s　|　分市 %d 市（%d 跌）· mffb" % (sec.get("tag", ""), len(mffb_jz), down_n)
+            sec["tag"] = "%s　|　mffb%s 分市 %d 市（%d 跌）%s" % (
+                sec.get("tag", ""), (" " + jz_date) if jz_date else "",
+                len(mffb_jz), down_n,
+                "（源站滞后期）" if jz_lag >= 2 else "")
 
     # ===== 板块五补充：Mysteel（我的钢铁网·鸡业）白羽分市场报价 =====
     try:
@@ -1018,6 +1046,7 @@ def main():
         print("[warn] 走势卡更新失败:", e)
 
     # ===== meta / footer =====
+    stale_days = 0          # 最新板块日期相对今天的滞后天数（供新鲜度闸门使用）
     d["meta"]["date_cn"] = date_cn
     d["meta"]["date_iso"] = today.isoformat()
     d["meta"]["weekday"] = weekday
@@ -1042,6 +1071,13 @@ def main():
                 d["meta"]["data_span"] = "%d/%d~%d/%d" % (oldest[0], oldest[1],
                                                           newest[0], newest[1])
                 d["meta"]["data_stale"] = True
+            # 滞后天数（跨年安全：板块日期 > 今天说明是去年底的那一期）
+            nyear = bj.year if newest <= today_md else bj.year - 1
+            try:
+                stale_days = (datetime.date(bj.year, bj.month, bj.day)
+                              - datetime.date(nyear, newest[0], newest[1])).days
+            except ValueError:
+                stale_days = 0
     except Exception as e:
         print("[warn] 更新时间写入失败:", e)
     d["footer"] = ("云端自动更新 · 数据源：鸡病专业网 jbzyw.com / mffb.com.cn · 页面生成 %s %s · "
@@ -1061,6 +1097,37 @@ def main():
         json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
     with open(state_path, "w", encoding="utf-8") as f:
         json.dump(new_state, f, ensure_ascii=False, indent=1)
+
+    # ===== 滞后来源清单 =====
+    # 顶部只显示一个跨度，看不出是哪个源慢了。这里把每个板块最旧的一期列出来，
+    # workflow 日志里一眼可查，省得每次都翻 data.json。
+    try:
+        print("[lag] 各板块最旧一期：")
+        for s in d.get("sections", []):
+            tag = s.get("tag", "")
+            ds = [(int(a), int(b)) for a, b in re.findall(r"(\d{1,2})/(\d{1,2})", tag)]
+            ds += [(int(mo), int(dd))
+                   for _y, mo, dd in re.findall(r"(\d{4})-(\d{2})-(\d{2})", tag)]
+            ds = [x for x in ds if 1 <= x[0] <= 12 and 1 <= x[1] <= 31]
+            if not ds:
+                continue
+            old = min(ds, key=lambda x: (x[0], x[1]))
+            try:
+                lag = max(0, (today - datetime.date(today.year, *old)).days)
+            except ValueError:
+                lag = 0
+            print("   %-9s 最旧 %d/%d（滞后 %d 天）" % (s.get("title", "")[:9], old[0], old[1], lag))
+    except Exception as e:
+        print("[warn] 滞后清单输出失败:", e)
+
+    # ===== 新鲜度闸门 =====
+    # 源站每天发一期，滞后 1 天属正常（凌晨或周末尚未发文）；滞后 >=2 天说明抓取链路异常
+    # （新一期没发现、解析失败等），此时以退出码 3 通知 workflow 等待后重跑，避免把陈旧
+    # 数据当当天行情发给采购经理。仅在 REQUIRE_FRESH=1 时启用，本地调试不受影响。
+    print("[fresh] 最新板块日期滞后 %d 天" % stale_days)
+    if os.environ.get("REQUIRE_FRESH") == "1" and stale_days >= 2:
+        print("[fresh] 数据滞后 %d 天 → 退出码 3，交 workflow 等待后重抓" % stale_days)
+        sys.exit(3)
 
     print("data.json 更新完成 → %s" % date_cn)
     print("汇总省份: 淘汰鸡%d 鸡蛋%d | 白羽%d行 | 产区%d行 | 817 %d行"
