@@ -431,48 +431,81 @@ def ncb_discover():
     return out
 
 
+def ncb_fetch(aid):
+    """抓取一期「全国鸡价」正文：PC 站优先，失败再试 m.163 移动站（同内容不同域名，
+    可绕过云端个别 IP 对 www.163 的偶发封锁）。带重试。"""
+    urls = [NCB_ART % aid, "https://m.163.com/dy/article/%s.html" % aid]
+    for u in urls:
+        for _ in range(2):
+            try:
+                h = fetch(u, timeout=15, headers=PC_UA)
+                if h and len(h) > 2000:
+                    return h
+            except Exception as e:
+                print("[warn] ncb 抓取 %s 失败: %s" % (u.split("/")[-1], e))
+    return None
+
+
 def ncb_latest(seed_ids):
-    """取最新一期「全国鸡价」：先走站内搜索，搜不到再退回推荐位扩散"""
+    """取最新一期「全国鸡价」。
+
+    优先级：关键词聚合页（静态、无需正文即可拿到「最新日期」）＞ 种子文章推荐位扩散。
+
+    硬规则（修复「云端偶发拉不到聚合页→退化旧种子→数据滞留旧日期如 8/20」）：
+    只要关键词聚合页成功解析出最新日期 kw_max，最终返回的文章日期绝不允许早于 kw_max。
+    即便正文暂时抓不到，也返回聚合页定位到的最新一期（正文置空），交由上层降级处理，
+    绝不停留在旧数据上。
+    """
     now = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
-    # 通道一：站内搜索（最新期最全）
-    cands = [c for c in ncb_discover() if c[0][0] == 0 or c[0][0] == now.year]
+    # 通道一：关键词聚合页（首选，可稳定拿到各期及日期）
+    kw = ncb_discover_keyword()
+    kw_max = max((c[0] for c in kw), default=None)
+    cands = [c for c in kw if c[0][0] == 0 or c[0][0] == now.year]
     cands.sort(key=lambda x: x[0], reverse=True)
     for key, aid, title in cands[:5]:
-        try:
-            h = fetch(NCB_ART % aid, timeout=15)
-        except Exception:
-            continue
-        if "全国鸡价" in title or "全国鸡价" in h:
-            print("[ncb] 搜索命中 %d/%d %s" % (key[1], key[2], aid))
+        h = ncb_fetch(aid)
+        if h and ("全国鸡价" in title or "全国鸡价" in h):
+            print("[ncb] 聚合页命中 %d/%d %s" % (key[1], key[2], aid))
             return aid, title, h
 
-    # 通道二：种子文章的相关推荐扩散
-    found, tried, frontier = [], set(), list(seed_ids)
-    for _ in range(2):          # 最多向外扩展两层
-        nxt = []
-        for aid in frontier:
-            if aid in tried:
-                continue
-            tried.add(aid)
-            try:
-                h = fetch(NCB_ART % aid, timeout=15)
-            except Exception:
-                continue
-            tm = re.search(r"<title>([^<]*)</title>", h)
-            title = tm.group(1) if tm else ""
-            if "全国鸡价" in title:
-                dm = re.search(r"(\d+)月(\d+)日", title)
-                key = (int(dm.group(1)), int(dm.group(2))) if dm else (0, 0)
-                found.append((key, aid, title, h))
-            nxt.extend(x for x in re.findall(r"(L[A-Z0-9]{15,20})", h) if x not in tried)
-        frontier = nxt[:8]
-        if not frontier:
-            break
-    if not found:
-        return None, "", None
-    found.sort(key=lambda x: x[0], reverse=True)
-    _, aid, title, html = found[0]
-    return aid, title, html
+    # 通道二：仅当聚合页完全无结果时才用种子扩散；任何结果不得旧于 kw_max
+    if not kw:
+        found, tried, frontier = [], set(), list(seed_ids)
+        for _ in range(2):          # 最多向外扩展两层
+            nxt = []
+            for aid in frontier:
+                if aid in tried:
+                    continue
+                tried.add(aid)
+                h = ncb_fetch(aid)
+                if not h:
+                    continue
+                tm = re.search(r"<title>([^<]*)</title>", h)
+                title = tm.group(1) if tm else ""
+                if "全国鸡价" in title:
+                    dm = re.search(r"(\d+)月(\d+)日", title)
+                    key = (int(dm.group(1)), int(dm.group(2))) if dm else (0, 0)
+                    if kw_max and key < kw_max:   # 闸门：不得旧于聚合页已知最新
+                        print("[ncb] 跳过旧文 %d/%d（聚合页已知最新 %d/%d）"
+                              % (key[0], key[1], kw_max[1], kw_max[2]))
+                        continue
+                    found.append((key, aid, title, h))
+                nxt.extend(x for x in re.findall(r"(L[A-Z0-9]{15,20})", h) if x not in tried)
+            frontier = nxt[:8]
+            if not frontier:
+                break
+        if found:
+            found.sort(key=lambda x: x[0], reverse=True)
+            _, aid, title, html = found[0]
+            return aid, title, html
+
+    # 通道三：聚合页已定位最新一期（日期已知），但正文暂时抓不到——
+    # 返回其 ID/标题（正文置空），上层标记为「已定位 X/X，正文暂未抓到」，绝不停留旧数据
+    if cands:
+        key, aid, title = cands[0]
+        print("[ncb] 正文暂未抓到，但聚合页已定位最新一期 %d/%d %s" % (key[1], key[2], aid))
+        return aid, title, None
+    return None, "", None
 
 
 def parse_ncb_chicken(html):
@@ -997,12 +1030,17 @@ def main():
         print("[warn] 农财宝典抓取失败:", e)
         ncb_aid, ncb_html = None, None
     ncb_date = ""
-    if ncb_aid and ncb_html:
-        new_state["ncb_seed"] = ncb_aid          # 记住最新一期，明天从它继续往前找
+    if ncb_aid:
+        # 只要聚合页定位到了最新一期就记下种子，避免下一轮退化回旧种子（修复 8/20 回退 bug）
+        new_state["ncb_seed"] = ncb_aid
         dm = re.search(r"(\d+)月(\d+)日", ncb_title or "")
         ncb_date = "%s/%s" % (dm.group(1), dm.group(2)) if dm else ""
-        rows = parse_ncb_chicken(ncb_html)
-        print("农财宝典全国鸡价(%s): %d 个快大类报价" % (ncb_date, len(rows)))
+        if ncb_html:
+            rows = parse_ncb_chicken(ncb_html)
+            print("农财宝典全国鸡价(%s): %d 个快大类报价" % (ncb_date, len(rows)))
+        else:
+            rows = []
+            print("农财宝典: 已定位最新一期 %s，但正文暂未抓到，沿用上次报价" % ncb_date)
         if rows:
             prev_sh = state.get("sanhuang", {})
             tbl = []
@@ -1064,7 +1102,14 @@ def main():
                           % (len(rows), fmt(sh_avg), fmt(min(mids)), fmt(max(mids)), ncb_date))
             print("三黄鸡速览卡: %s 元/斤，历史 %d 天" % (sh["price"], len(ch["dates"])))
     else:
-        print("农财宝典: 未找到全国鸡价文章，沿用原有数据")
+        # ncb_aid 已定位到最新一期但正文未抓到（rows 为空）→ 降级：沿用上次报价并标注已定位日期
+        if ncb_aid:
+            sec = d["sections"][2]
+            sec["tag"] = ("快大类分省价 %s 已定位（农财宝典聚合页），正文暂未抓到、沿用上次报价；"
+                          "817肉杂同日抓取（%s）。" % (ncb_date or "?", d817))
+            print("农财宝典: 已定位最新一期 %s，正文未抓到，沿用原有报价" % (ncb_date or "?"))
+        else:
+            print("农财宝典: 未找到全国鸡价文章，沿用原有数据")
 
     # ===== 板块六：规则研判 =====
     tips = []
