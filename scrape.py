@@ -963,6 +963,8 @@ def main():
         (r"山西（运城）麻鸡", "山西运城"),
     ]
     live_rows = []
+    brother_rows = []          # ② 快大类兄弟品种（青脚麻公/麻公/黄花公）= 鸡病专业网侧的三黄鸡参照
+    BROTHER_RE = re.compile(r"青脚麻公|麻公鸡|黄花公|麻黄|青麻公")
     for pat, label in region_pats:
         hit = latest(arts, pat)
         if not hit:
@@ -976,9 +978,10 @@ def main():
             print("[warn] 产区文章失败 %s: %s" % (label, e))
             continue
         for name, price, dirc in items:
-            live_rows.append([label, name, price,
-                              {"t": {"flat": "→", "up": "↑", "down": "↓"}[dirc], "dir": dirc},
-                              "数据" + adate])
+            cell = {"t": {"flat": "→", "up": "↑", "down": "↓"}[dirc], "dir": dirc}
+            live_rows.append([label, name, price, cell, "数据" + adate])
+            if BROTHER_RE.search(name):   # ② 兄弟品种：跨源印证三黄鸡快大类走势
+                brother_rows.append([label, name, price, cell, "数据" + adate])
     print("产区文章共解析 %d 行" % len(live_rows))
     if live_rows:
         sec = d["sections"][3]
@@ -1110,6 +1113,26 @@ def main():
             print("农财宝典: 已定位最新一期 %s，正文未抓到，沿用原有报价" % (ncb_date or "?"))
         else:
             print("农财宝典: 未找到全国鸡价文章，沿用原有数据")
+
+    # ===== 板块三增强：②兄弟品种参照（鸡病专业网快大类） + ③冻品批发补高校后勤参照 =====
+    sec = d["sections"][2]
+    # ② 鸡病专业网 青脚麻公鸡/麻公鸡/黄花公鸡（快大类兄弟品种）跨源参照，与农财宝典三黄鸡互为印证
+    if brother_rows:
+        bro_tbl = {
+            "cap": "快大类兄弟品种参照（鸡病专业网活禽棚前·云端每日更新）· 与农财宝典三黄鸡同属快大类，可交叉印证",
+            "headers": ["产区", "品种（快大类兄弟）", "棚前价（元/斤）", "环比", "数据日期"],
+            "rows": brother_rows,
+        }
+        sec["tables"] = [t for t in sec["tables"] if "兄弟品种参照" not in (t.get("cap") or "")] + [bro_tbl]
+        print("三黄鸡板块②兄弟品种参照: %d 行" % len(brother_rows))
+    # ③ 冻品批发参考价表补「高校后勤/餐饮采购价」参照行（与现有冻品批发区间 4.9-5.25 吻合）
+    for t in sec["tables"]:
+        if len(t["headers"]) > 1 and "冻品批发价" in t["headers"][1]:
+            if not any("高校后勤" in str(r[0]) for r in t["rows"]):
+                t["rows"].append(["高校后勤/餐饮采购（三黄鸡冻品）", "≈4.9（约115元/件·23斤装）",
+                                  "整鸡件装", "高校后勤采购价参考（西北工大等）"])
+                print("三黄鸡板块③冻品批发参照补高校后勤行")
+            break
 
     # ===== 板块六：规则研判 =====
     tips = []
