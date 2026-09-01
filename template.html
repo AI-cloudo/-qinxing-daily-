@@ -560,33 +560,51 @@ function doSearch(){
 }
 $('refreshBtn').onclick = function(){ load(true); checkSelfUpdate(false); };
 
-/* ---------- 加载数据（多源回退：国内 raw.githubusercontent 常不通） ---------- */
+/* ---------- 加载数据（多源择优：并行拉取，取 content_date/update_time 最新的一份） ---------- */
 var REMOTE = 'https://raw.githubusercontent.com/AI-cloudo/-qinxing-daily-/main/data.json';
 var SOURCES = [
-  'https://ai-cloudo.github.io/-qinxing-daily-/data.json',
   'https://cdn.jsdelivr.net/gh/AI-cloudo/-qinxing-daily-@main/data.json',
+  'https://ai-cloudo.github.io/-qinxing-daily-/data.json',
   'https://raw.githubusercontent.com/AI-cloudo/-qinxing-daily-/main/data.json'
 ];
-function load(manual){ trySrc(0, manual); }
 
-function trySrc(i, manual){
-  if (i >= SOURCES.length){
+// 新鲜度评分：优先用 meta.oldest_date（报告里最旧板块的日期，越新整体越新鲜），
+// 带该字段的新构建一律优先于无该字段的旧构建；同组内再比 update_time
+function freshKey(j){
+  var m = (j && j.meta) || {};
+  var ut = (m.update_time || '');
+  var hhmm = ut.indexOf(' ') >= 0 ? ut.slice(ut.indexOf(' ') + 1) : '00:00';
+  if (m.oldest_date){ return '1' + m.oldest_date + ' ' + hhmm; }   // 新构建：1 开头，最旧日期越新越靠前
+  var ds = (m.date_iso || '').trim() || '2026-01-01';
+  return '0' + ds + ' ' + hhmm;                                    // 旧构建兜底：0 开头，永远排在带字段的之后
+}
+
+function load(manual){
+  var cands = [];
+  var pending = SOURCES.length;
+  SOURCES.forEach(function(src){
+    fetch(src + '?t=' + Date.now(), {cache: 'no-store'})
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(j){ if (j && j.meta) cands.push(j); })
+      .catch(function(){})
+      .then(function(){ if(--pending === 0) finishLoad(cands, manual); });
+  });
+}
+
+function finishLoad(cands, manual){
+  if (!cands.length){
     if (manual) toast('云端暂不可达，当前为缓存数据');
     return;
   }
-  fetch(SOURCES[i] + '?t=' + Date.now(), {cache: 'no-store'})
-    .then(function(r){ if(!r.ok) throw 0; return r.json(); })
-    .then(function(j){
-      var oldDate = STATE.data && STATE.data.meta && STATE.data.meta.date_iso;
-      STATE.data = j; STATE.src = 'live'; setBadge();
-      if (manual){ render(); toast('已更新到最新数据'); }
-      else if (!STATE._loaded){ render(); }
-      else if (j.meta && j.meta.date_iso !== oldDate){ render(); toast('检测到新数据，已自动刷新'); }
-      STATE._loaded = true;
-    })
-    .catch(function(){
-      trySrc(i + 1, manual);   // 换下一个源重试
-    });
+  cands.sort(function(a,b){ var x=freshKey(a), y=freshKey(b); return x<y ? 1 : x>y ? -1 : 0; });
+  var j = cands[0];                               // 取内容最新的一份
+  var oldKey = ((STATE.data && STATE.data.meta && (STATE.data.meta.content_date || STATE.data.meta.date_iso)) || '') + '|' + ((STATE.data && STATE.data.meta && STATE.data.meta.update_time) || '');
+  var newKey = (j.meta.content_date || j.meta.date_iso || '') + '|' + (j.meta.update_time || '');
+  STATE.data = j; STATE.src = 'live'; setBadge();
+  if (manual){ render(); toast('已更新到最新数据（' + (j.meta.update_time || '') + '）'); }
+  else if (!STATE._loaded){ render(); }
+  else if (newKey !== oldKey){ render(); toast('检测到新数据，已自动刷新'); }
+  STATE._loaded = true;
 }
 /* ---------- 页面自我更新：摆脱手机浏览器缓存，保证拿到最新版页面 ---------- */
 var BUILD = /*__BUILD_ID__*/"dev";
