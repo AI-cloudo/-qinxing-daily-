@@ -1155,13 +1155,28 @@ def main():
             tips.append("白羽肉鸡：山东棚前均价 %s 元/斤，%s"
                         % (fmt(avg), "低位区间，可分批建仓" if avg < 3.3 else "按需采购，不追高"))
     tips.append("三黄鸡/黑凤公鸡板块：今日云端未抓到新价，沿用 %s 数据，重要决策前请人工核实" % (prev_date or "前日"))
-    d["sections"][5]["blocks"] = [
+    # ===== 保留 AI 周度研判 block（周一精修写入，整周沿用；下周一 AI 写入新研判时自然替换）=====
+    # 识别标记：block 的 h 中含「本周研判」。云端每日重建规则 block，但周研判必须跨日存活。
+    WEEKLY_MARK = "本周研判"
+    _old_blocks = []
+    if len(d.get("sections", [])) > 5:
+        _old_blocks = d["sections"][5].get("blocks") or []
+    weekly_blocks = [b for b in _old_blocks
+                     if isinstance(b, dict) and WEEKLY_MARK in str(b.get("h", ""))]
+    if weekly_blocks:
+        print("板块六：保留 AI 周度研判 %d 个 block" % len(weekly_blocks))
+    d["sections"][5]["blocks"] = weekly_blocks + [
         {"h": "📌 今日区域价差与机会（规则自动计算）", "p": tips[0] if tips else "—"},
         {"h": "🥚 蛋鸡链传导", "p": tips[1] if len(tips) > 1 else "—"},
         {"h": "🍗 白羽肉鸡操作", "p": tips[2] if len(tips) > 2 else "—"},
         {"h": "⚠️ 数据完整性提示", "p": tips[-1]},
     ]
-    d["sections"][5]["tag"] = "规则自动生成（无AI研判）· 生成时间 %s" % date_short
+    if weekly_blocks:
+        _m = re.search(r"(\d{1,2}[-/]\d{1,2})", str(weekly_blocks[0].get("h", "")))
+        _wt = "AI周度研判 %s" % _m.group(1) if _m else "AI周度研判"
+    else:
+        _wt = "无AI周度研判"
+    d["sections"][5]["tag"] = "%s · 规则提示自动生成 %s" % (_wt, date_short)
 
     # ===== 走势卡：老母鸡追加当日点 =====
     try:
