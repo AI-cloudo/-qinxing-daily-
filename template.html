@@ -40,6 +40,10 @@ main{max-width:860px;margin:0 auto;padding:12px 12px 0}
 .scard .nm{font-size:12px;color:var(--sub);margin-bottom:4px}
 .scard .pr{font-size:18px;font-weight:800;letter-spacing:-.3px}
 .scard .pr small{font-size:10px;font-weight:400;color:var(--sub)}
+.scard .pr.up{color:var(--up)}
+.scard .pr.down{color:var(--down)}
+.scard .pr.flat{color:var(--sub)}
+.scard .pr .ar{font-size:12px;font-weight:800;margin-right:1px}
 .scard .cmp{display:flex;flex-wrap:wrap;gap:4px 8px;margin-top:6px;min-height:20px}
 .scard .cmp .tag{font-size:10px;padding:2px 6px;border-radius:12px;background:#f2f4f3;font-weight:600;white-space:nowrap}
 .scard .cmp .tag.up{background:#fdecec;color:var(--up)}
@@ -389,8 +393,18 @@ function renderCards(d){
   (d.trend_cards || []).forEach(function(tc){
     var ch = tc.chart || {};
     var vals = (ch.series && ch.series[0] && ch.series[0].values) || [];
+    /* 当日环比方向：价格大数字直接上色（红涨/绿跌/平灰 + 箭头）*/
+    var dir = 'flat', ar = '';
+    if (vals.length >= 2){
+      var a = parseFloat(vals[vals.length - 2]), b = parseFloat(vals[vals.length - 1]);
+      if (!isNaN(a) && !isNaN(b)){
+        var df = b - a;
+        if (df > 0.0005){ dir = 'up'; ar = '↑'; }
+        else if (df < -0.0005){ dir = 'down'; ar = '↓'; }
+      }
+    }
     h += '<div class="scard"><div class="nm">' + esc(tc.name) + '</div>' +
-      '<div class="pr">' + esc(tc.price) + '<small> ' + esc((tc.unit||'').trim()) + '</small></div>' +
+      '<div class="pr ' + dir + '">' + (ar ? '<span class="ar">' + ar + '</span>' : '') + esc(tc.price) + '<small> ' + esc((tc.unit||'').trim()) + '</small></div>' +
       '<div class="cmp">' + trendTags(vals) + '</div>' +
       sparkline(ch.dates || [], ch.series || []) +
       '<div class="nt">' + esc(tc.note || '') + '</div></div>';
