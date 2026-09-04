@@ -601,6 +601,116 @@ def fetch_retry(url, times=3):
     return None
 
 
+# ===== 肉类食品网 meat360（板块一「老母鸡/淘汰鸡」横向参照源）=====
+# 两个每日系列，列表页 URL 固定：
+#   价格分析栏目 2/5/17 → 每日约14:30《全国淘汰鸡市场行情综述》（红羽/粉羽分产区区间价）
+#   价格日报栏目 2/4/12 → 每日上午《全国蛋鸡市场价格日报》（淘汰鸡/鸡蛋全国最低/最高/均价/涨跌）
+# 主表仍以鸡病专业网为准，meat360 仅作参照表展示 + 跨源价差提示；抓取失败自动跳过。
+MEAT360 = "https://www.meat360.cn"
+MEAT360_LIST_ANALYSIS = MEAT360 + "/price/list/2/5/17.html"
+MEAT360_LIST_DAILY = MEAT360 + "/price/list/2/4/12.html"
+M360_HEADERS = {"User-Agent": PC_UA["User-Agent"], "Referer": MEAT360 + "/"}
+
+
+def fetch_m360(url, times=3):
+    """meat360 对移动 UA / 无 Referer 请求返回 403，必须带桌面 UA + Referer"""
+    for i in range(times):
+        try:
+            return fetch(url, headers=M360_HEADERS)
+        except Exception as e:
+            print("[warn] meat360 抓取失败(%d/%d) %s: %s" % (i + 1, times, url, e))
+    return None
+
+
+def meat360_latest(list_url, keyword):
+    """从 meat360 栏目列表页找标题含 keyword 的最新文章，返回 (url, title)"""
+    html = fetch_m360(list_url)
+    if not html:
+        return None, ""
+    best = None
+    for m in re.finditer(r'href="((?:https?://www\.meat360\.cn)?(/price/detail/(\d+)\.html))"[^>]*>([^<]{4,80})<', html):
+        title = m.group(4).strip()
+        if keyword in title:
+            if best is None or int(m.group(3)) > best[0]:
+                best = (int(m.group(3)), m.group(1), title)
+    if not best:
+        return None, ""
+    url = best[1] if best[1].startswith("http") else MEAT360 + best[1]
+    return url, best[2]
+
+
+def parse_m360_cull_review(html):
+    """meat360《全国淘汰鸡市场行情综述》→ [{region, price, chg}]
+    版式隔几天会变（4列「主流收购价」/「红羽+粉羽」两列区间），按行文本宽容解析：
+    每行起点=产区名，收集其后出现的价格区间（红羽在前）与变动描述。"""
+    lines = text_lines(html)
+    start = None
+    for i, l in enumerate(lines):
+        if "主产区" in l and ("报价" in l or "现货" in l):
+            start = i + 1
+            break
+    if start is None:
+        return []
+    REGIONS = ("山东", "河南", "河北", "东北", "辽吉", "江苏", "安徽", "两湖", "江西",
+               "西南", "川渝", "山西", "陕西", "西北", "华中", "华南")
+    P_RE = re.compile(r"\d\.\d{1,2}\s*[—~\-–－]\s*\d\.\d{1,2}")
+    out, cur = [], None
+    for l in lines[start:]:
+        if "市场现状" in l or "利多" in l or re.match(r"^[一二三四五六]、", l):
+            break
+        if l.startswith("备注"):
+            continue
+        is_region = (len(l) <= 14 and not re.search(r"\d", l)
+                     and any(l.startswith(r) for r in REGIONS))
+        if is_region:
+            cur = {"region": l, "prices": [], "chg": ""}
+            out.append(cur)
+            continue
+        if cur is None:
+            continue
+        added_prices = False
+        for m in P_RE.finditer(l):
+            nums = re.findall(r"\d\.\d+", m.group(0))
+            if nums and float(nums[0]) >= 3.0:   # 过滤「上浮0.1—0.2」这类小数变动
+                cur["prices"].append(m.group(0).replace(" ", ""))
+                added_prices = True
+        # 变动列与价格列是不同单元格；本行已提取过价格就不再当变动行处理，
+        # 防止把「5.70—6.00」的 —6.00 误判为跌幅
+        if not cur["chg"] and not added_prices:
+            m2 = re.search(r"(?:\d+\s*[~—－]\s*)?[—－\-＋+]\d+\.\d+(?:\s*[~—－\-]\s*[—－\-＋+]?\d+\.\d+)?", l)
+            if m2:
+                cur["chg"] = m2.group(0).replace(" ", "")
+            elif any(k in l for k in ("持平", "稳定", "持稳", "偏弱", "偏强",
+                                      "微跌", "微涨", "走弱", "抗跌", "坚挺")):
+                cur["chg"] = l[:10]
+    return [{"region": r["region"], "price": " / ".join(r["prices"][:2]),
+             "chg": r["chg"] or "—"} for r in out if r["prices"]]
+
+
+def parse_m360_egg_daily(html):
+    """meat360《全国蛋鸡市场价格日报》→ {"cull": {...}, "egg": {...}}
+    表格式：品种 | 最低价 | 最高价 | 平均价 | 前日均价 | 涨跌（均元/斤）"""
+    lines = text_lines(html)
+    out = {}
+    for key, tag in (("淘汰鸡", "cull"), ("鸡蛋", "egg")):
+        for i, l in enumerate(lines):
+            if key in l and "元/斤" in l:
+                nums = []
+                for l2 in lines[i + 1:i + 15]:
+                    s = l2.strip()
+                    if re.fullmatch(r"[—－\-+＋]?\d+\.\d+", s):
+                        nums.append(s)
+                        if len(nums) == 5:
+                            break
+                    elif nums:
+                        break
+                if len(nums) == 5:
+                    out[tag] = {"min": nums[0], "max": nums[1],
+                                "avg": nums[2], "prev": nums[3], "chg": nums[4]}
+                break
+    return out
+
+
 # ---------- 工具 ----------
 
 def avg_of(prices):
@@ -752,6 +862,91 @@ def main():
                     "蛋价连续上涨→延淘惜售，淘汰鸡供应收紧"],
         }
         sec["tag"] = "数据日期 %s · 鸡病专业网 · 云端自动更新" % sum_date
+
+    # ===== 板块一补充：meat360 两路横向参照源（淘汰鸡综述 + 蛋鸡日报）=====
+    # 主表不动，参照表并列展示；任一源失败自动跳过，不影响其他板块
+    m360_note_extra = ""
+    m360_cull_avg = None
+    m360_rows, m360_date = [], ""
+    m360_url, m360_title = meat360_latest(MEAT360_LIST_ANALYSIS, "全国淘汰鸡市场行情综述")
+    if m360_url:
+        _m = re.search(r"(\d{4})年(\d+)月(\d+)日", m360_title or "")
+        m360_date = "%d/%d" % (int(_m.group(2)), int(_m.group(3))) if _m else ""
+        _html = fetch_m360(m360_url)
+        if _html:
+            try:
+                m360_rows = parse_m360_cull_review(_html)
+            except Exception as e:
+                print("[warn] meat360 淘汰鸡综述解析失败:", e)
+    print("meat360 淘汰鸡综述(%s): %d 个产区" % (m360_date, len(m360_rows)))
+    if m360_rows:
+        sec = d["sections"][0]
+        keep = [t for t in sec.get("tables", []) if "meat360" not in (t.get("cap") or "")]
+        sec["tables"] = keep + [{
+            "cap": "meat360 全国淘汰鸡行情综述参照（%s数据）· 与鸡病专业网口径不同，供交叉比对" % m360_date,
+            "headers": ["产区", "报价（元/斤，红羽在前）", "日内变动", "数据日期"],
+            "rows": [[r["region"], r["price"], r["chg"], "数据" + m360_date] for r in m360_rows],
+        }]
+        sec["tag"] = "%s　|　meat360综述 %s" % (sec.get("tag", ""), m360_date)
+        m360_note_extra = "+meat360综述"
+        # 跨源比对：meat360 山东区间中值 vs 鸡病专业网山东均价，差 ≥0.3 提示核价
+        try:
+            if cull_by_prov and cull_avg.get("山东"):
+                for r in m360_rows:
+                    if r["region"].startswith("山东"):
+                        vals = [float(x) for x in re.findall(r"\d\.\d+", r["price"])]
+                        if vals:
+                            mid = sum(vals) / len(vals)
+                            diff = mid - cull_avg["山东"]
+                            if abs(diff) >= 0.3 and "up" in sec.get("analysis", {}):
+                                sec["analysis"]["up"].append(
+                                    "⚠ 跨源分歧：meat360 山东区间中值 %.2f 与鸡病专业网山东均价 %.2f 相差 %.2f 元/斤，下单前建议电话核价"
+                                    % (mid, cull_avg["山东"], diff))
+                        break
+        except Exception as e:
+            print("[warn] meat360 跨源比对失败:", e)
+
+    m360_daily = {}
+    m360_daily_url, m360_daily_title = meat360_latest(MEAT360_LIST_DAILY, "全国蛋鸡市场价格日报")
+    if m360_daily_url:
+        _html = fetch_m360(m360_daily_url)
+        if _html:
+            try:
+                m360_daily = parse_m360_egg_daily(_html)
+            except Exception as e:
+                print("[warn] meat360 蛋鸡日报解析失败:", e)
+    print("meat360 蛋鸡日报: %s" % (sorted(m360_daily.keys()),))
+    if m360_daily:
+        rows = []
+        for _tag, _name in (("cull", "淘汰鸡"), ("egg", "鸡蛋")):
+            _v = m360_daily.get(_tag)
+            if _v:
+                rows.append([_name, _v["min"], _v["max"], _v["avg"], _v["chg"]])
+        if rows:
+            sec = d["sections"][0]
+            keep = [t for t in sec.get("tables", []) if "蛋鸡日报" not in (t.get("cap") or "")]
+            sec["tables"] = keep + [{
+                "cap": "meat360 全国蛋鸡日报摘要（全国均价，含红羽粉羽）· 供与主表互证",
+                "headers": ["品种", "最低价", "最高价", "均价（元/斤）", "较前日"],
+                "rows": rows,
+            }]
+            try:
+                m360_cull_avg = float(m360_daily["cull"]["avg"])
+                m360_note_extra += "+meat360日报"
+            except (KeyError, ValueError):
+                pass
+            # 与鸡病专业网全国均价的口径差异提示（>0.3 属权重/羽色口径不同）
+            try:
+                if m360_cull_avg and cull_by_prov:
+                    nat = round(sum(cull_avg.values()) / len(cull_avg), 2)
+                    diff = m360_cull_avg - nat
+                    sec = d["sections"][0]
+                    if abs(diff) >= 0.3 and "up" in sec.get("analysis", {}):
+                        sec["analysis"]["up"].append(
+                            "ℹ 口径提示：meat360 全国均价 %.2f 与鸡病专业网全国均价 %.2f 相差 %.2f 元/斤（区域/羽色权重不同，属正常口径差异）"
+                            % (m360_cull_avg, nat, diff))
+            except Exception as e:
+                print("[warn] meat360 口径比对失败:", e)
 
     # ===== 板块二补充：mffb 重点销区市场蛋价（销区口径，与又鸟蛋/小鲜农价同类） =====
     mffb_egg_url, mffb_egg_title = mffb_latest("鸡蛋价格行情")
@@ -1237,8 +1432,8 @@ def main():
     except Exception as e:
         print("[warn] 更新时间写入失败:", e)
         d["meta"].setdefault("content_date", today.isoformat())
-    d["footer"] = ("云端自动更新 · 数据源：鸡病专业网 jbzyw.com / mffb.com.cn · 页面生成 %s %s · "
-                   "手机页面每2分钟自动检查新版" % (date_cn, weekday))
+    d["footer"] = ("云端自动更新 · 数据源：鸡病专业网 jbzyw.com / mffb.com.cn / 肉类食品网 meat360.cn · "
+                   "页面生成 %s %s · 手机页面每2分钟自动检查新版" % (date_cn, weekday))
 
     # ===== 保存 =====
     # new_state 在上方各板块里逐步填充（如 ncb_seed / sanhuang），这里补齐基础字段
