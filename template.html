@@ -66,7 +66,13 @@ nav.tabs::-webkit-scrollbar{display:none}
 nav.tabs button{flex-shrink:0;border:none;background:var(--card);color:var(--sub);font-size:13px;padding:8px 14px;border-radius:20px;box-shadow:0 1px 3px rgba(30,58,47,.08);cursor:pointer}
 nav.tabs button.on{background:var(--brand2);color:#fff;font-weight:600}
 /* 板块内容 */
-.sec-title{font-size:16px;font-weight:700;margin:4px 0 10px;color:var(--ink)}
+.sec-title{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;margin:4px 0 10px;color:var(--ink)}
+.sec-title .st-t{font-size:16px;font-weight:700;margin-right:2px}
+.sec-title .badges{display:inline-flex;flex-wrap:wrap;gap:4px}
+.sec-title .badge{font-size:10px;line-height:1;padding:3px 7px;border-radius:999px;background:#eef2ef;border:1px solid #dfe7e2;color:#5a6b64;font-weight:600;white-space:nowrap;align-self:center}
+.sec-title .badge b{font-weight:700;color:var(--brand2);margin-left:2px}
+.sec-title .badge.stale{background:#fdf0ec;border-color:#f3d2c4;color:#a2543a}
+.sec-title .badge.stale b{color:#c0392b}
 .ana{background:#fffdf5;border:1px solid #f3e7c8;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.6}
 .ana .a-t{font-size:12px;font-weight:700;color:#8a6d1f;margin-bottom:5px}
 .ana .a-up{color:var(--ink)}
@@ -163,6 +169,20 @@ function cellHtml(c){
 }
 function rowKey(si, ti, ri){ return si + '-' + ti + '-' + ri; }
 function rowText(row){ return row.map(function(c){ return typeof c === 'object' ? c.t : c; }).join(' '); }
+
+/* 板块标题角标：数据源 + 日期（build.py 已算好 s.badges；滞后标橙警示） */
+function secBadgeHtml(s){
+  var b = (s && s.badges) || [];
+  if (!b.length) return '';
+  return '<span class="badges">' + b.map(function(x){
+    return '<span class="badge' + (x.stale ? ' stale' : '') + '" title="' +
+      (x.stale ? '该源数据已滞后' : '数据源') + '">' + esc(x.src || '') +
+      (x.d ? ' <b>' + esc(x.d) + '</b>' : '') + '</span>';
+  }).join('') + '</span>';
+}
+function secTitleHtml(s){
+  return '<div class="sec-title"><span class="st-t">' + esc(s.title) + '</span>' + secBadgeHtml(s) + '</div>';
+}
 
 function setBadge(){
   var b = $('hdBadge');
@@ -450,13 +470,13 @@ function renderSection(d, si){
   if (!s){ box.innerHTML = ''; return; }
   var html = '';
   if (s.type === 'final'){
-    html = '<div class="sec-title">' + esc(s.title) + '</div>';
+    html = secTitleHtml(s);
     (s.blocks || []).forEach(function(b){
       html += '<div class="blk" style="border-left-color:var(--accent);background:#fffdf5"><b>' + esc(b.h||'') + '</b><p>' + esc(b.p||b.text||'') + '</p></div>';
     });
     box.innerHTML = html; return;
   }
-  html = '<div class="sec-title">' + esc(s.title) + '</div>';
+  html = secTitleHtml(s);
   var a = s.analysis;
   if (a){
     html += '<div class="ana"><div class="a-t">' + esc(a.title || '') + '</div>' +
