@@ -21,6 +21,139 @@ for i, s in enumerate(data.get('sections', [])):
     for t in s.get('tables', []):
         t.setdefault('cap', '')
 
+# ===== 板块角标：每个板块提炼「数据源 + 日期」，落后页面基准日 >=2 天自动标旧 =====
+import datetime as _dt
+
+
+def _each_date(txt):
+    """从文本提取全部日期 -> [(月, 日, 位置)]，支持 9/4、08-31、9月4日、2026年9月4日"""
+    out = []
+    txt = str(txt)
+    for m in re.finditer(r'(\d{1,2})月(\d{1,2})日|(\d{1,2})[/\-.](\d{1,2})(?!\d)', txt):
+        if m.group(3):
+            out.append((int(m.group(3)), int(m.group(4)), m.start()))
+        else:
+            out.append((int(m.group(1)), int(m.group(2)), m.start()))
+    return out
+
+
+def _nearest(dates, pos, max_gap=24):
+    """取距 pos 最近的日期；太远(>max_gap字符)视为无关，返回 None"""
+    if not dates:
+        return None
+    m, d, p = min(dates, key=lambda x: abs(x[2] - pos))
+    if abs(p - pos) > max_gap:
+        return None
+    return (m, d)
+
+
+def build_badges(data):
+    """给每个 section 附 badges=[{src, d, stale}]，供标题行角标展示"""
+    meta = data.get('meta', {}) or {}
+    try:
+        y, mo, dd = [int(x) for x in str(meta.get('date_iso', '')).split('-')[:3]]
+        today = _dt.date(y, mo, dd)
+    except Exception:
+        today = _dt.date.today()
+
+    def _gap(md):
+        d1 = _dt.date(today.year, md[0], md[1])
+        if d1 > today:                      # 跨年（1月 vs 上年12月）
+            d1 = _dt.date(today.year - 1, md[0], md[1])
+        return (today - d1).days
+
+    def _date_col(s, kw='数据日期'):
+        """取板块内所有表「数据日期」列的最新 (月,日)，无则 None"""
+        best = None
+        for t in (s.get('tables') or []):
+            hs = [str(h or '') for h in (t.get('headers') or [])]
+            ci = next((i for i, h in enumerate(hs) if kw in h), None)
+            if ci is None:
+                continue
+            for row in (t.get('rows') or []):
+                if ci >= len(row):
+                    continue
+                v = row[ci]
+                v = v.get('t', v) if isinstance(v, dict) else v
+                for m_, d_, _p in _each_date(v):
+                    if best is None or (m_, d_) > best:
+                        best = (m_, d_)
+        return best
+
+    for s in (data.get('sections') or []):
+        tab = s.get('tab', '')
+        tag = str(s.get('tag') or '')
+        badges = []
+
+        def push(src, md):
+            for b in badges:
+                if b['src'] == src:
+                    if md and _gap(md) >= 2:
+                        b['stale'] = True
+                    return
+            badges.append({'src': src,
+                           'd': ('%d/%d' % md) if md else '',
+                           'stale': bool(md and _gap(md) >= 2)})
+
+        if tab in ('淘汰鸡', '鸡蛋'):
+            # tag 句式: 数据日期 9/4 · 鸡病专业网 · 云端自动更新
+            m = re.search(r'数据日期\s*(\d{1,2})[/\-.](\d{1,2})', tag)
+            md = (int(m.group(1)), int(m.group(2))) if m else _date_col(s)
+            push('鸡病专业网', md)
+
+        elif tab == '三黄鸡':
+            # tag 句式: 快大类分省价 9/3 云端抓取（农财宝典）；817肉杂同日抓取（9/4）
+            ds = _each_date(tag)
+            p = tag.find('农财宝典')
+            if p >= 0:
+                push('农财宝典', _nearest(ds, p) or _date_col(s))
+            p = tag.find('817')
+            if p >= 0:
+                push('817棚前', _nearest(ds, p))
+            if not badges:                      # 兜底：主表日期列
+                push('农财宝典', _date_col(s))
+
+        elif tab == '公鸡':
+            # 活禽棚前主源 = 鸡病专业网；日期取表「数据日期」列最新
+            md = _date_col(s)
+            m = re.search(r'数据日期\s*(\d{1,2})[/\-.](\d{1,2})', tag)
+            push('鸡病专业网', m and (int(m.group(1)), int(m.group(2))) or md)
+
+        elif tab == '白羽':
+            # tag 用 | 分隔多源: 数据日期 9/4 · 鸡病专业网 | mffb 8/28 … | Mysteel 08-31
+            for seg in re.split(r'[|｜]', tag):
+                for src in ('鸡病专业网', 'mffb', 'Mysteel'):
+                    p = seg.find(src)
+                    if p >= 0:
+                        push(src, _nearest(_each_date(seg), p))
+
+        elif tab == '研判':
+            ds = _each_date(tag)
+            md = max(((m_, d_) for m_, d_, _p in ds), key=lambda x: x) if ds else None
+            if '无AI' in tag or '规则' in tag:
+                src = '规则研判'
+            elif 'AI' in tag or '周度' in tag or '人工' in tag:
+                src = 'AI研判'
+            else:
+                src = '研判'
+            push(src, md)
+
+        if not badges and _each_date(tag):      # 兜底：至少给出日期 + 已知源词
+            src = '数据源'
+            for w in ('鸡病专业网', '农财宝典', 'mffb', 'Mysteel', '鸡网'):
+                if w in tag:
+                    src = w
+                    break
+            ds = _each_date(tag)
+            push(src, max(((m_, d_) for m_, d_, _p in ds), key=lambda x: x))
+
+        s['badges'] = badges
+        print('  角标[%s]: %s' % (tab, ' | '.join(
+            '%s %s%s' % (b['src'], b['d'], '⚠滞后' if b['stale'] else '')
+            for b in badges) or '（无）'))
+
+build_badges(data)
+
 # 构造第四张速览卡：白羽肉鸡（云端 scrape.py 已维护带历史的卡时，直接沿用不覆盖）
 def avg_price(s):
     nums = re.findall(r'\d+\.?\d*', str(s))
