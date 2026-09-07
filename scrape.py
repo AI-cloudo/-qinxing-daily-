@@ -739,6 +739,19 @@ def main():
 
     new_state = {}          # 各板块按需写入，最后统一落盘 state.json
 
+    # ===== 统一去旧稿：清除各板块历史遗留的 banner/summary 静态文本 =====
+    # 背景：banner/summary 曾由旧版代码或 AI 精修"一次性写入后被逐日继承"（如公鸡板块
+    # "8/27 中元节"、鸡蛋板块"9/1"），是过期研判残留的载体。每日先清空，随后各板块
+    # 按当日抓取结果重建（当前仅三黄鸡板块在下方重建块写回），保证数据内不再滞留旧稿。
+    _stale_flds = []
+    for _s in (d.get("sections") or []):
+        for _f in ("banner", "summary"):
+            if _f in _s and isinstance(_s[_f], (str, list)):
+                _stale_flds.append((_s.get("title", "?")[:8], _f))
+                _s.pop(_f, None)
+    if _stale_flds:
+        print("已清除历史遗留静态稿 %d 处: %s" % (len(_stale_flds), _stale_flds))
+
     arts = collect_articles()
     print("共发现文章链接 %d 篇" % len(arts))
 
@@ -1132,11 +1145,13 @@ def main():
         live_tables = [{"headers": ["地区", "品种", "棚前价（元/斤）", "环比", "数据日期"],
                         "rows": live_rows + carry_rows}]
         sec["tables"] = live_tables + keep_tables[1:]
-        sec["tag"] = "活禽棚前价 · 数据源：鸡病专业网各产区日报 · 云端自动更新（黑凤公鸡等未覆盖项沿用%s数据）" % prev_date
+        sec["tag"] = ("活禽棚前价 · 数据源：鸡病专业网各产区日报 · 云端自动更新"
+                      "（黑凤公鸡等源站未日更项，以行内注记日期为准）")
         sec["analysis"] = {
             "title": "📊 公鸡分析（各产区标注数据日期）",
             "up": ["今日云端抓取 %d 个产区报价，每行标注数据日期" % len(live_rows),
-                   "黑凤公鸡等未覆盖项沿用 %s 数据，请核对" % (prev_date or "前日")],
+                   "黑凤公鸡（开封/邢台）等源站未日更项：活禽按行内注记（源站或AI校准日期），"
+                   "冻品批发为历史基准，采价前请电话核实"],
             "ref": ["麻公/黄花公产区价差大，跨区采购先算运费",
                     "中元节/中秋等节前备货常推高价，节后常有回调"],
         }
@@ -1162,7 +1177,8 @@ def main():
                 "rows": [[r["region"], r["spec"], r["price"], r["cell"], "数据" + d817] for r in rows817]}
         sec["tables"] = [keep_tables[0], t817] + keep_tables[1:] if keep_tables else [t817]
         sec["tag"] = ("口径：快大类前端活禽=冻品三黄鸡成本基准。817肉杂为当日云端抓取（%s）；"
-                      "快大三黄各省价沿用%s AI校准数据；两者均为快大类，可互相印证。" % (d817, prev_date))
+                      "快大三黄各省价沿用最近一期农财宝典数据（当日聚合页未更新）；两者均为快大类，可互相印证。"
+                      % d817)
 
     # ===== 板块三补充：网易·农财宝典「全国鸡价」日报 → 三黄鸡快大类分省价 =====
     seeds = list(NCB_SEEDS)
@@ -1174,6 +1190,7 @@ def main():
         print("[warn] 农财宝典抓取失败:", e)
         ncb_aid, ncb_html = None, None
     ncb_date = ""
+    rows = []          # 预置：农财宝典抓取异常时（ncb_aid 为空）也能安全走"沿用"路径
     if ncb_aid:
         # 只要聚合页定位到了最新一期就记下种子，避免下一轮退化回旧种子（修复 8/20 回退 bug）
         new_state["ncb_seed"] = ncb_aid
