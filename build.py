@@ -154,6 +154,66 @@ def build_badges(data):
 
 build_badges(data)
 
+# ===== 数据源策略：间断源只留数据不展示（每周一自动化维护 src_policy.json）=====
+# 依据 2026-09-07 用户决定：日更不断更的固定源作展示数据；间断式更新源只用于周研判。
+# 只过滤注入页面的快照，不修改 data.json 文件（间断源数据继续由云端爬虫积累，供周一 AI 周研判用）。
+SRC_POLICY_FILE = os.path.join(BASE, 'src_policy.json')
+DEFAULT_POLICY = {
+    "daily": {
+        "淘汰鸡": ["鸡病专业网", "鸡网ckexc"], "鸡蛋": ["鸡病专业网"],
+        "三黄鸡": ["农财宝典", "817棚前", "鸡病专业网"], "公鸡": ["鸡病专业网"],
+        "白羽": ["鸡病专业网"]},
+    "weekly": {"白羽": ["mffb", "Mysteel"]},
+    "hide_tables": [{"sec": "白羽", "match": ["mffb", "Mysteel"]}]
+}
+
+
+def apply_src_policy(data):
+    """按策略隐藏间断源表 -> 返回被隐藏的源关键词（用于剔除对应角标）"""
+    try:
+        pol = json.load(open(SRC_POLICY_FILE, encoding='utf-8'))
+        print('数据源策略: src_policy.json (updated %s)' % pol.get('updated', '?'))
+    except Exception:
+        pol = DEFAULT_POLICY
+        print('数据源策略: 内置默认（src_policy.json 不存在）')
+    hidden_words = []
+    for h in (pol.get('hide_tables') or []):
+        sec, words = h.get('sec', ''), [str(w) for w in (h.get('match') or []) if w]
+        if not words:
+            continue
+        hidden_words.extend(words)
+        for s in (data.get('sections') or []):
+            if s.get('tab') != sec:
+                continue
+            keep, drop = [], []
+            for t in (s.get('tables') or []):
+                sig = ' '.join([str(t.get('cap') or '')] + [str(x) for x in (t.get('headers') or [])])
+                (drop if any(w in sig for w in words) else keep).append(t)
+            if drop:
+                s['tables'] = keep
+                print('  策略隐藏[%s]: %d 张间断源表 (关键词: %s)' % (sec, len(drop), '、'.join(words)))
+    return hidden_words
+
+
+_hidden_words = apply_src_policy(data)
+for _s in (data.get('sections') or []):        # 间断源角标同步剔除
+    bs = _s.get('badges') or []
+    if bs:
+        _s['badges'] = [b for b in bs if not any(w in (b.get('src') or '') for w in _hidden_words)]
+
+# 间断源字样从「会渲染的文字」中清理：速览卡 note + 页脚 footer
+# （tag/analysis 不渲染，保留给周一 AI 周研判作全源参考）
+for _tc in (data.get('trend_cards') or []):
+    _note = str(_tc.get('note') or '')
+    for _w in _hidden_words:
+        _note = re.sub(r'\s*\+\s*%s[^·]*' % re.escape(_w), '', _note)
+    _tc['note'] = _note
+if _hidden_words and data.get('footer'):
+    _ft = str(data['footer'])
+    for _w in _hidden_words:
+        _ft = re.sub(r'\s*/\s*%s(?:\.com\.cn|\.com)?' % re.escape(_w), '', _ft)
+    data['footer'] = _ft
+
 # 构造第四张速览卡：白羽肉鸡（云端 scrape.py 已维护带历史的卡时，直接沿用不覆盖）
 def avg_price(s):
     nums = re.findall(r'\d+\.?\d*', str(s))
