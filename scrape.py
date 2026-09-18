@@ -1072,14 +1072,30 @@ def main():
                 vals = ch["series"][0]["values"]
                 print("白羽历史回填 %d 天: %s" % (len(hist), ch["dates"]))
         md = "%d/%d" % (today.month, today.day)
-        if ch["dates"] and ch["dates"][-1] == md:
-            vals[-1] = round(avg, 2)          # 同一天重复跑，覆盖当天值
+
+        def _bk(x):
+            _m = re.match(r"(\d+)/(\d+)", str(x) or "")
+            return (int(_m.group(1)), int(_m.group(2))) if _m else (0, 0)
+
+        # 用鸡病专业网数据日期（bro_date）而非抓取当天写点，避免错位日期造成假涨跌
+        point = bro_date or md
+        if ch["dates"] and _bk(ch["dates"][-1]) >= _bk(point):
+            prev_val = vals[-2] if len(vals) >= 2 else None
+            base = ch["dates"][:-1]
+            if base and _bk(base[-1]) == _bk(point):
+                base = base[:-1]       # 去重：避免出现两个相同数据日
+                prev_val = vals[-3] if len(vals) >= 3 else None
         else:
-            ch["dates"].append(md)
-            vals.append(round(avg, 2))
-            if len(ch["dates"]) > 10:
-                ch["dates"] = ch["dates"][-10:]
-                ch["series"][0]["values"] = vals[-10:]
+            prev_val = vals[-1] if vals else None
+            base = ch["dates"][-9:]
+        ch["dates"] = base[-9:] + [point]
+        _bv = ch["series"][0]["values"]
+        if len(_bv) > len(base):
+            _bv = _bv[:len(base)]
+        ch["series"][0]["values"] = _bv + [round(avg, 2)]
+        # 涨跌方向：当日均价 vs 上一数据日值，阈值与 trend_cell 一致
+        _bdir = trend_cell(round(avg, 2), prev_val) if prev_val is not None else {"dir": "flat"}
+        by["dir"] = _bdir["dir"]
         # 首日没有历史时，用山东各市的环比幅度推算昨日价，让「较昨日」立刻有值
         if len(ch["dates"]) == 1:
             deltas = []
@@ -1248,20 +1264,44 @@ def main():
                 ch["series"] = [{"name": "快大类出栏均价", "values": []}]
             ch["series"][0].setdefault("values", [])
             md = "%d/%d" % (today.month, today.day)
-            if ch["dates"] and ch["dates"][-1] == md:
-                ch["series"][0]["values"][-1] = sh_avg
+
+            def _sk(x):
+                _m = re.match(r"(\d+)/(\d+)", str(x) or "")
+                return (int(_m.group(1)), int(_m.group(2))) if _m else (0, 0)
+
+            # 用农财宝典数据日期（ncb_date）而非抓取当天写点，避免错位日期造成假涨跌
+            point = ncb_date or md
+            if ch["dates"] and _sk(ch["dates"][-1]) >= _sk(point):
+                base = ch["dates"][:-1]
+                if base and _sk(base[-1]) == _sk(point):
+                    base = base[:-1]   # 去重：避免出现两个相同数据日
             else:
-                ch["dates"].append(md)
-                ch["series"][0]["values"].append(sh_avg)
-                if len(ch["dates"]) > 10:
-                    ch["dates"] = ch["dates"][-10:]
-                    ch["series"][0]["values"] = ch["series"][0]["values"][-10:]
+                base = ch["dates"][-9:]
+            ch["dates"] = base[-9:] + [point]
+            _sv = ch["series"][0]["values"]
+            if len(_sv) > len(base):
+                _sv = _sv[:len(base)]
+            ch["series"][0]["values"] = _sv + [sh_avg]
+            # 涨跌方向：主表快大类各省环比多数决（与板块表格同口径；持平占多数判稳）
+            _sc = {"up": 0, "down": 0, "flat": 0}
+            for _r in tbl:
+                _cd = _r[3] if isinstance(_r[3], dict) else {}
+                _sc[_cd.get("dir", "flat")] = _sc.get(_cd.get("dir", "flat"), 0) + 1
+            if _sc["flat"] > _sc["up"] and _sc["flat"] > _sc["down"]:
+                sh["dir"] = "flat"
+            elif _sc["up"] > _sc["down"]:
+                sh["dir"] = "up"
+            elif _sc["down"] > _sc["up"]:
+                sh["dir"] = "down"
+            else:
+                sh["dir"] = "flat"
             sh["price"] = fmt(sh_avg)
             sh["note"] = ("冻品流通口径·快大类活禽出栏：%d省均价 %s 元/斤（区间 %s-%s）；"
                           "数据源：农财宝典全国鸡价 %s。注意：三黄项/矮脚黄项 7.6-8.5 为活禽鲜销，"
                           "非冻品渠道，勿按此价核算"
                           % (len(rows), fmt(sh_avg), fmt(min(mids)), fmt(max(mids)), ncb_date))
-            print("三黄鸡速览卡: %s 元/斤，历史 %d 天" % (sh["price"], len(ch["dates"])))
+            print("三黄鸡速览卡: %s 元/斤 dir=%s（%s数据），历史 %d 天"
+                  % (sh["price"], sh["dir"], point, len(ch["dates"])))
 
             # ===== 板块三「行情研判/核心信号/速览卡」随农财宝典最新一期日期每日重建 =====
             # 背景：此板块 analysis/banner/summary 曾是"一次性写入后被逐日继承"的静态稿，
@@ -1430,23 +1470,51 @@ def main():
         _wt = "无AI周度研判"
     d["sections"][5]["tag"] = "%s · 规则提示自动生成 %s" % (_wt, date_short)
 
-    # ===== 走势卡：老母鸡追加当日点 =====
+    # ===== 走势卡：老母鸡（按「数据日期」写点，涨跌口径与板块表格一致） =====
     try:
         if cull_avg:
             nat = round(sum(cull_avg.values()) / len(cull_avg), 2)
             tc = d["trend_cards"][0]
             chart = tc["chart"]
             dates = chart.get("dates") or []
-            if dates and dates[-1] == date_short:
-                dates = dates[:-1]  # 重复运行幂等：替换当日点而非追加
-            chart["dates"] = dates[-9:] + [date_short]
+
+            def _dkey(x):
+                _m = re.match(r"(\d+)/(\d+)", str(x) or "")
+                return (int(_m.group(1)), int(_m.group(2))) if _m else (0, 0)
+
+            # 用源站文章的数据日期（sum_date）而非抓取当天：避免把昨日数据标成今日，
+            # 前端拿错位点相减得出"假涨跌"（曾出现全板块持平却显示涨价）。
+            point = sum_date or date_short
+            if dates and _dkey(dates[-1]) >= _dkey(point):
+                base = dates[:-1]      # 覆盖末点（同数据日重跑 / 纠正上一轮误标的抓取日）
+                if base and _dkey(base[-1]) == _dkey(point):
+                    base = base[:-1]   # 去重：避免出现两个相同数据日
+            else:
+                base = dates[-9:]
+            chart["dates"] = base[-9:] + [point]
             for s in chart["series"]:
                 vals = (s.get("values") or [])
-                if len(vals) > len(dates):
-                    vals = vals[:-1]
-                s["values"] = vals[-9:] + [nat]
+                if len(vals) > len(base):
+                    vals = vals[:len(base)]
+                s["values"] = vals + [nat]
+            # 涨跌方向 = 各省环比多数决，与板块表格 trend_cell 完全同口径
+            # 规则：持平占多数 → 稳；否则按涨/跌家数比较（避免"8平1涨"被误判为涨价）
+            _pv = state.get("cull", {})
+            _dd = {"up": 0, "down": 0, "flat": 0}
+            for _p, _v in cull_avg.items():
+                _dd[trend_cell(_v, _pv.get(_p))["dir"]] += 1
+            if _dd["flat"] > _dd["up"] and _dd["flat"] > _dd["down"]:
+                tc["dir"] = "flat"
+            elif _dd["up"] > _dd["down"]:
+                tc["dir"] = "up"
+            elif _dd["down"] > _dd["up"]:
+                tc["dir"] = "down"
+            else:
+                tc["dir"] = "flat"
+            tc["price"] = fmt(nat)     # 大数字与 note/走势末值同值（原来 price 长期不更新）
             tc["note"] = ("全国淘汰鸡均价 %s 元/斤（%s，%d省）。云端自动更新，数据源：鸡病专业网。"
                           % (fmt(nat), sum_date, len(cull_avg)))
+            print("老母鸡速览卡: %s 元/斤 dir=%s（%s数据，%d省）" % (fmt(nat), tc["dir"], point, len(cull_avg)))
     except Exception as e:
         print("[warn] 走势卡更新失败:", e)
 
