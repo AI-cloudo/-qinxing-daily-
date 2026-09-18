@@ -195,11 +195,15 @@ function toast(msg){
 }
 
 /* ---------- 趋势标签：昨日 / 3天 / 7天 ---------- */
-function trendTag(vals, days, label){
+function trendTag(vals, days, label, includeToday){
   if (!vals || vals.length < 2) return '<span class="tag flat">' + label + ' —</span>';
-  var n = Math.min(days, vals.length);
-  var start = parseFloat(vals[vals.length - n]);
-  var end = parseFloat(vals[vals.length - 1]);
+  /* 窗口口径（2026-09-17 定）：昨日 = 昨天→今天（含今天最新点）；
+     3天/7天 = 最近 N 个数据点的窗口，截至昨天、不含今天 */
+  var endIdx = includeToday ? vals.length - 1 : vals.length - 2;
+  var startIdx = includeToday ? vals.length - days : vals.length - 1 - days;
+  if (startIdx < 0) startIdx = 0;
+  var start = parseFloat(vals[startIdx]);
+  var end = parseFloat(vals[endIdx]);
   if (isNaN(start) || isNaN(end)) return '<span class="tag flat">' + label + ' —</span>';
   var diff = end - start, TH = 0.001;
   if (Math.abs(diff) < TH) return '<span class="tag flat">' + label + ' → 持平</span>';
@@ -209,7 +213,7 @@ function trendTag(vals, days, label){
   return '<span class="tag ' + cls + '">' + label + arrow + abs + '</span>';
 }
 function trendTags(vals){
-  return trendTag(vals, 2, '昨日') + trendTag(vals, 3, '3天') + trendTag(vals, 7, '7天');
+  return trendTag(vals, 2, '昨日', true) + trendTag(vals, 3, '3天', false) + trendTag(vals, 7, '7天', false);
 }
 
 /* ---------- 迷你折线 ---------- */
@@ -413,14 +417,18 @@ function renderCards(d){
   (d.trend_cards || []).forEach(function(tc){
     var ch = tc.chart || {};
     var vals = (ch.series && ch.series[0] && ch.series[0].values) || [];
-    /* 当日环比方向：价格大数字直接上色（红涨/绿跌/平灰 + 箭头）*/
+    /* 当日环比方向：优先用爬虫按「板块表格同口径」算好的 dir（避免拿错位日期点相减得假涨跌），
+       缺失时才回退到走势末两点，且阈值与爬虫 trend_cell 一致（0.005 元）*/
     var dir = 'flat', ar = '';
-    if (vals.length >= 2){
+    if (tc.dir === 'up' || tc.dir === 'down' || tc.dir === 'flat'){
+      dir = tc.dir;
+      ar = { up: '↑', down: '↓', flat: '' }[dir];
+    } else if (vals.length >= 2){
       var a = parseFloat(vals[vals.length - 2]), b = parseFloat(vals[vals.length - 1]);
       if (!isNaN(a) && !isNaN(b)){
         var df = b - a;
-        if (df > 0.0005){ dir = 'up'; ar = '↑'; }
-        else if (df < -0.0005){ dir = 'down'; ar = '↓'; }
+        if (df > 0.005){ dir = 'up'; ar = '↑'; }
+        else if (df < -0.005){ dir = 'down'; ar = '↓'; }
       }
     }
     h += '<div class="scard"><div class="nm">' + esc(tc.name) + '</div>' +
