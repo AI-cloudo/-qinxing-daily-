@@ -844,13 +844,17 @@ def main():
             rows.append([p, fmt(egg_avg[p]), trend_cell(egg_avg[p], prev_egg.get(p)), mood_txt])
         sec = d["sections"][1]
         sec["tables"][0] = {"headers": ["主产省", "鸡蛋均价（元/斤）", "环比", "当日氛围"], "rows": rows}
-        downs = sum(1 for p in trend_by_prov if max(trend_by_prov[p], key=trend_by_prov[p].get) == "down")
-        ups = sum(1 for p in trend_by_prov if max(trend_by_prov[p], key=trend_by_prov[p].get) == "up")
+        # 涨跌家数按「环比列」统计（与表格 trend_cell 同口径）。
+        # 原先按源文「当日氛围」统计，会出现表格 7 省标 ↑ 而文案写「0省涨」的自相矛盾。
+        _ed = {"up": 0, "down": 0, "flat": 0}
+        for p in egg_avg:
+            _ed[trend_cell(egg_avg[p], prev_egg.get(p))["dir"]] += 1
+        downs, ups = _ed["down"], _ed["up"]
         sec["analysis"] = {
             "title": "📊 鸡蛋分析（%s数据）" % sum_date,
-            "up": ["今日主产省蛋价：%d省落、%d省涨、其余持稳，均价区间 %s-%s 元/斤"
-                   % (downs, ups, fmt(min(egg_avg.values())), fmt(max(egg_avg.values()))),
-                   "数据源：鸡病专业网汇总"],
+            "up": ["今日主产省蛋价环比：%d省涨、%d省落、%d省持平，均价区间 %s-%s 元/斤"
+                   % (ups, downs, _ed["flat"], fmt(min(egg_avg.values())), fmt(max(egg_avg.values()))),
+                   "数据源：鸡病专业网汇总（环比＝各省均价与上一交易日比较）"],
             "ref": ["蛋价与淘汰鸡存在传导：蛋价走弱→养殖端淘汰意愿增强",
                     "蛋价连续上涨→延淘惜售，淘汰鸡供应收紧"],
         }
@@ -1153,11 +1157,32 @@ def main():
             if BROTHER_RE.search(name):   # ② 兄弟品种：跨源印证三黄鸡快大类走势
                 brother_rows.append([label, name, price, cell, "数据" + adate])
     print("产区文章共解析 %d 行" % len(live_rows))
+    # 品种名归一 + 同品种重复行去重：
+    # 源文常把引导语写进正文（如「皖南地区麻鸡成鸡方面：…」），解析后品种名会带「方面/行情/价格」
+    # 尾巴；同一品种也可能因屠宰/活禽/农贸多口径重复出现，导致同一行连出 3 次。
+    def _norm_breed(nm):
+        for suf in ("方面", "行情", "价格"):
+            if nm.endswith(suf) and len(nm) > len(suf) + 1:
+                nm = nm[: -len(suf)]
+        return nm
+    _seen_r, _ded_rows = set(), []
+    for r in live_rows:
+        r[1] = _norm_breed(r[1])
+        k = (r[0], r[1], r[2])
+        if k in _seen_r:
+            continue
+        _seen_r.add(k)
+        _ded_rows.append(r)
+    if len(_ded_rows) != len(live_rows):
+        print("产区文章去重: %d -> %d 行" % (len(live_rows), len(_ded_rows)))
+    live_rows = _ded_rows
     if live_rows:
         sec = d["sections"][3]
         keep_tables = sec.get("tables", [])
-        # 保留黑凤公鸡等沿用行
-        carry_rows = [r for r in keep_tables[0]["rows"] if "黑凤" in str(r)]
+        # 保留黑凤公鸡等沿用行（若该地区当天已抓到新报价，则以新数据为准，不再重复挂旧行）
+        _live_regions = set(r[0] for r in live_rows)
+        carry_rows = [r for r in keep_tables[0]["rows"]
+                      if "黑凤" in str(r) and r[0] not in _live_regions]
         live_tables = [{"headers": ["地区", "品种", "棚前价（元/斤）", "环比", "数据日期"],
                         "rows": live_rows + carry_rows}]
         sec["tables"] = live_tables + keep_tables[1:]
@@ -1523,6 +1548,10 @@ def main():
     d["meta"]["date_cn"] = date_cn
     d["meta"]["date_iso"] = today.isoformat()
     d["meta"]["weekday"] = weekday
+    # 内容日期（数据口径日）：原先只写在 except 分支里，成功路径永不赋值，
+    # 导致该字段被 setdefault 永久锁在旧日期（曾在 2026-09-21 卡了整整两周，
+    # 与 data_span 长期矛盾）。这里无条件跟随当日。
+    d["meta"]["content_date"] = today.isoformat()
     # 更新时间（北京时间）：与「数据日期」分开，避免源未出新价时被误以为没更新
     try:
         bj = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
