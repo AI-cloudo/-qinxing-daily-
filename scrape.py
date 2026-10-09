@@ -601,6 +601,63 @@ def fetch_retry(url, times=3):
     return None
 
 
+# ===== 鸡病专业网《山东地区X-X日鸡苗-肉鸡冻品市场动态速览》→ 白羽分割品【日更】 =====
+# 2026-10-09 新增：用户要求白羽分割品由「周一AI周更」升级为每日自动收集。
+# 该文每日一篇（标题形如「山东地区10-11日鸡苗-肉鸡冻品市场动态速览」，日期是覆盖期而非发文日），
+# 正文直接给出山东冻品成交价区间：胸类/板冻/翅类/腿类/爪类，云端可直抓。
+# 辽宁口径暂无免费日更源（Mysteel 同名日更表在付费墙后），仍走周一 AI 校准的周更表并另行标注。
+FROZEN_KW = "冻品市场动态速览"
+FROZEN_ORDER = ["单冻大胸", "单冻毛胸", "板冻大胸", "板冻小胸", "大中小翅根",
+                "大中小翅中", "单冻翅尖", "腿类", "大中小", "大小凤爪"]
+FROZEN_GROUP = {"单冻大胸": "鸡胸", "单冻毛胸": "鸡胸", "板冻大胸": "鸡胸", "板冻小胸": "鸡胸",
+                "大中小翅根": "鸡翅", "大中小翅中": "鸡翅", "单冻翅尖": "鸡翅",
+                "腿类": "鸡腿", "大中小": "鸡爪", "大小凤爪": "鸡爪"}
+FROZEN_LABEL = {"腿类": "腿类（80-180g）", "大中小": "爪类（大中小）", "大小凤爪": "凤爪（大小）",
+                "大中小翅根": "翅根（大中小）", "大中小翅中": "翅中（大中小）"}
+
+
+def frozen_pick(arts):
+    """取最新一期冻品速览。标题不含「X月X日」，不能用 latest() 的日期排序，改按 view id 降序。"""
+    best = None
+    for title, url in arts.items():
+        if FROZEN_KW not in title:
+            continue
+        m = re.search(r"/view/(\d+)", url)
+        key = int(m.group(1)) if m else 0
+        if best is None or key > best[0]:
+            best = (key, title, url)
+    return best
+
+
+def parse_frozen_sd(html):
+    """冻品速览正文 → 山东冻品成交区间。返回 [{name,label,group,lo,hi,mid}]"""
+    txt = re.sub(r"<[^>]+>", " ", html).replace("&nbsp;", " ")
+    # 腿类都写成「腿类(80-180g )成交价区间…」，规格括号会污染品名提取，先归一掉
+    txt = re.sub(r"腿类\s*[（(]\s*80\s*-\s*180\s*g?\s*[)）]", "腿类", txt)
+    txt = re.sub(r"\s+", "", txt)
+    out, seen = [], set()
+    for m in re.finditer(r"成交价区间[（(]?([\d.]+)[-~～－—]([\d.]+)", txt):
+        pre = txt[max(0, m.start() - 20):m.start()]
+        pre = re.split(r"[；;，,、（(]", pre)[-1].replace("主流", "")
+        for nm in FROZEN_ORDER:
+            if nm in pre and nm not in seen:
+                seen.add(nm)
+                lo, hi = float(m.group(1)), float(m.group(2))
+                out.append({"name": nm, "label": FROZEN_LABEL.get(nm, nm),
+                            "group": FROZEN_GROUP.get(nm, ""),
+                            "lo": lo, "hi": hi, "mid": round((lo + hi) / 2, 2)})
+                break
+    return out
+
+
+def frozen_pub_date(html):
+    """发文日期：正文头部固定为「YYYY-MM-DD 来源:鸡病专业网…」。
+    标题里的「10-11日」是覆盖期而非发文日，不能当数据日期用。"""
+    txt = re.sub(r"<[^>]+>", " ", html).replace("&nbsp;", " ")
+    m = re.search(r"(20\d{2})-(\d{1,2})-(\d{1,2})\s*(?:来源|文章编辑)", txt)
+    return "%d/%d" % (int(m.group(2)), int(m.group(3))) if m else ""
+
+
 # ===== 鸡网 ckexc（板块一「老母鸡/淘汰鸡」横向参照源 v2，替代 meat360）=====
 # meat360 全站反爬（本机与云端均 403/502）弃用；ckexc 实测可直连。
 # ckexc 每日发《YYYY-M-DD 全国淘汰鸡参考价格》：红鸡/粉鸡分省分地市，活禽/屠宰双口径+涨跌，
@@ -1044,6 +1101,46 @@ def main():
         sec["tag"] = "%s　|　Mysteel %s" % (sec.get("tag", ""), ms.get("date", "")[5:] or "")
     else:
         print("Mysteel 白羽分市场: 无数据")
+
+    # ===== 板块五补充：鸡病专业网《山东地区X-X日鸡苗-肉鸡冻品市场动态速览》→ 分割品【日更】 =====
+    # 用户 2026-10-09 要求：白羽冻品行情必须每天收集，不能一周才一次（信息滞后）。
+    # 本表每日随云端三班抓取刷新；辽宁口径仍由周一 AI 校准的周更表承载（表头已标注）。
+    hit_fz = frozen_pick(arts)
+    if hit_fz:
+        _, fz_title, fz_url = hit_fz
+        fz_date, fz_rows = "", []
+        try:
+            fz_html = fetch(fz_url)
+            fz_date = frozen_pub_date(fz_html)
+            fz_rows = parse_frozen_sd(fz_html)
+        except Exception as e:
+            print("[warn] 冻品速览抓取失败:", e)
+        print("冻品速览(%s): %d 项" % (fz_date, len(fz_rows)))
+        if fz_rows:
+            prev_fz = state.get("frozen_sd", {})
+            fz_tbl = []
+            for r in fz_rows:
+                pv = prev_fz.get(r["name"])
+                fz_tbl.append([r["group"], r["label"],
+                               "%s-%s" % (fmt(r["lo"]), fmt(r["hi"])),
+                               fmt(r["mid"]), trend_cell(r["mid"], pv)])
+            sec = d["sections"][4]
+            keep = [t for t in sec.get("tables", [])
+                    if (t.get("headers") or [""])[0] != "品类"]
+            # 插到「周更分割品表」前面，日更与周更紧邻便于对照
+            pos = next((i for i, t in enumerate(keep)
+                        if (t.get("headers") or [""])[0] == "分割品"), len(keep))
+            keep.insert(pos, {
+                "headers": ["品类", "规格（山东成交区间·元/公斤）", "成交区间", "区间中值", "较昨日"],
+                "rows": fz_tbl,
+                "cap": ("白羽分割品·山东冻品成交价【日更 %s】· 源：鸡病专业网《山东地区鸡苗-肉鸡冻品市场动态速览》"
+                        "；辽宁口径见下方周更表。" % (fz_date or "?")),
+            })
+            sec["tables"] = keep
+            new_state["frozen_sd"] = {r["name"]: r["mid"] for r in fz_rows}
+            sec["tag"] = "%s　|　冻品日更 %s" % (sec.get("tag", ""), fz_date or "?")
+    else:
+        print("冻品速览: 未找到当期文章（跳过，不影响其他板块）")
 
     # ===== 顶栏第4张速览卡「白羽肉鸡」：每日累积历史，卡片才有昨日/3天/7天趋势 =====
     # 之前这张卡由前端临时拼出（只有1个点），导致趋势栏空白、备注无数据源
@@ -1599,6 +1696,8 @@ def main():
         new_state["sanhuang"] = state.get("sanhuang", {})
     if "ncb_seed" not in new_state:
         new_state["ncb_seed"] = state.get("ncb_seed", NCB_SEEDS[0])
+    if "frozen_sd" not in new_state:      # 山东冻品日更基准价，供次日算「较昨日」
+        new_state["frozen_sd"] = state.get("frozen_sd", {})
     with open(os.path.join(HERE, "data.json"), "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
     with open(state_path, "w", encoding="utf-8") as f:
