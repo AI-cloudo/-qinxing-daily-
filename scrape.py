@@ -658,6 +658,77 @@ def frozen_pub_date(html):
     return "%d/%d" % (int(m.group(2)), int(m.group(3))) if m else ""
 
 
+# ===== 博亚和讯《全国部分地区淘鸡出场价格》→ 板块一「淘汰鸡」分省分市【日更】 =====
+# 2026-10-09 新增。工作日日更（国庆等长假停发），表格含 省份/地区/蛋鸡品种/上期/本期/涨跌，
+# 粒度到地级市，覆盖 19 省（辽宁/河北/陕西/河南/山东/湖南/湖北/江苏/安徽/浙江/山西/甘肃/
+# 吉林/黑龙江/新疆/内蒙古/贵州/四川/江西），明显多于鸡病专业网汇总（11 省）且自带涨跌列。
+# search 页可稳定发现最新一期 article id（标题内"淘鸡"被 <font> 包裹，需先去标签再匹配）。
+BOYAR_TJ_SEARCH = "https://www.boyar.cn/search/%E6%B7%98%E9%B8%A1.html"
+# 注意：站点对移动 UA 返回精简页（无文章列表），必须用桌面 UA，勿用全局默认移动 UA
+BOYAR_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                              "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"}
+
+
+def boyar_latest():
+    """博亚和讯搜索页 → 最新一期《YYYY年M月D日全国部分地区淘鸡出场价格》的 (url, "M/D")"""
+    try:
+        h = fetch(BOYAR_TJ_SEARCH, timeout=25, headers=BOYAR_HEADERS)
+    except Exception as e:
+        print("[warn] 博亚和讯搜索页抓取失败:", e)
+        return None, ""
+    if not h:
+        return None, ""
+    cands = []
+    for m in re.finditer(r'href="(/article/(\d+)\.html)"[^>]*>(.{0,300}?)</a>', h, re.S):
+        u, aid, inner = m.group(1), m.group(2), m.group(3)
+        txt = re.sub(r"<[^>]+>", "", inner).strip()
+        if "淘鸡" not in txt or "出场价" not in txt:
+            continue
+        dm = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", txt)
+        if not dm:
+            continue
+        cands.append((int(aid), "https://www.boyar.cn" + u,
+                      "%d/%d" % (int(dm.group(2)), int(dm.group(3)))))
+    if not cands:
+        return None, ""
+    cands.sort(key=lambda x: x[0], reverse=True)
+    return cands[0][1], cands[0][2]
+
+
+def parse_boyar_tj(html):
+    """博亚淘鸡出场价表 → [{"prov","city","breed","prev","cur","chg"}]
+    省份列用 rowspan 跨行，其后各行只有 5 个 td（省份沿用上一行）。"""
+    rows, prov = [], ""
+    num = re.compile(r"^\d+(?:\.\d+)?$")
+    for tr in re.findall(r"<tr.*?</tr>", html, re.S):
+        tds = re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S)
+        cells = [re.sub(r"<[^>]+>", "", c).replace("&nbsp;", " ").strip() for c in tds]
+        if len(cells) == 6 and num.match(cells[4] or ""):
+            prov = cells[0]
+            rows.append({"prov": prov, "city": cells[1], "breed": cells[2],
+                         "prev": cells[3], "cur": cells[4], "chg": cells[5]})
+        elif len(cells) == 5 and prov and num.match(cells[3] or ""):
+            rows.append({"prov": prov, "city": cells[0], "breed": cells[1],
+                         "prev": cells[2], "cur": cells[3], "chg": cells[4]})
+    return rows
+
+
+def boyar_trend(chgs):
+    """省级涨跌：多数决（flat 家数占多数时优先判稳，避免单市波动带偏）"""
+    ups = sum(1 for c in chgs if c > 0)
+    downs = sum(1 for c in chgs if c < 0)
+    flats = len(chgs) - ups - downs
+    if flats >= max(ups, downs):
+        d = "flat"
+    elif ups > downs:
+        d = "up"
+    elif downs > ups:
+        d = "down"
+    else:
+        d = "flat"
+    return {"t": {"up": "↑", "down": "↓", "flat": "→"}[d], "dir": d}
+
+
 # ===== 鸡网 ckexc（板块一「老母鸡/淘汰鸡」横向参照源 v2，替代 meat360）=====
 # meat360 全站反爬（本机与云端均 403/502）弃用；ckexc 实测可直连。
 # ckexc 每日发《YYYY-M-DD 全国淘汰鸡参考价格》：红鸡/粉鸡分省分地市，活禽/屠宰双口径+涨跌，
@@ -967,6 +1038,54 @@ def main():
                             % (mid, cull_avg["山东"], diff))
             except Exception as e:
                 print("[warn] 鸡网ckexc 跨源比对失败:", e)
+
+    # ===== 板块一补充：博亚和讯「淘鸡分省出场价」（日更·19省·含涨跌，与主表交叉核验）=====
+    # 主表（鸡病专业网汇总，11省）保持不动，本表是粒度更细、覆盖更广的分省出场价（自带涨跌列）。
+    # 抓取/解析失败自动跳过，不影响任何现有板块。
+    bj_url, bj_date = boyar_latest()
+    bj_rows_raw = []
+    if bj_url:
+        try:
+            _bh = fetch(bj_url, headers=BOYAR_HEADERS)
+            bj_rows_raw = parse_boyar_tj(_bh) if _bh else []
+        except Exception as e:
+            print("[warn] 博亚和讯淘鸡抓取失败:", e)
+    bj_provs = sorted({r["prov"] for r in bj_rows_raw})
+    print("博亚和讯淘鸡(%s): %d 行 / %d 省" % (bj_date, len(bj_rows_raw), len(bj_provs)))
+    if len(bj_provs) >= 5:
+        _bjprice, _bjcity, _bjchg = {}, {}, {}
+        for r in bj_rows_raw:
+            try:
+                _bjprice.setdefault(r["prov"], []).append(float(r["cur"]))
+            except ValueError:
+                continue
+            _bjchg.setdefault(r["prov"], []).append(float(r["chg"] or 0))
+            _bjcity.setdefault(r["prov"], []).append(r["city"])
+        bj_avg = {p: round(sum(v) / len(v), 2) for p, v in _bjprice.items()}
+        bj_out = []
+        for p in sorted(bj_avg, key=lambda x: -bj_avg[x]):
+            cs = _bjcity[p]
+            note = "/".join(cs[:4]) + ("等%d市" % len(cs) if len(cs) > 4 else "")
+            bj_out.append([p, fmt(bj_avg[p]), boyar_trend(_bjchg.get(p, [])), note])
+        sec = d["sections"][0]
+        keep = [t for t in sec.get("tables", []) if "博亚和讯" not in (t.get("cap") or "")]
+        sec["tables"] = keep + [{
+            "cap": "淘汰鸡分省出场价 · 全部%d省（%s数据）· 博亚和讯日更，含涨跌，与上表鸡病专业网交叉核验"
+                   % (len(bj_provs), bj_date),
+            "headers": ["省份", "出场价（元/斤）", "涨跌", "覆盖城市"],
+            "rows": bj_out,
+        }]
+        sec["tag"] = "%s　|　博亚和讯 %s" % (sec.get("tag", ""), bj_date)
+        # 跨源比对：博亚山东出场价 vs 鸡病专业网山东均价，差 ≥0.3 提示核价
+        try:
+            if bj_avg.get("山东") and cull_avg.get("山东") and "up" in sec.get("analysis", {}):
+                _bd = bj_avg["山东"] - cull_avg["山东"]
+                if abs(_bd) >= 0.3:
+                    sec["analysis"]["up"].append(
+                        "⚠ 跨源分歧：博亚和讯 山东出场价 %.2f 与鸡病专业网山东均价 %.2f 相差 %.2f 元/斤，下单前建议电话核价"
+                        % (bj_avg["山东"], cull_avg["山东"], _bd))
+        except Exception as e:
+            print("[warn] 博亚和讯跨源比对失败:", e)
 
     # ===== 板块二补充：mffb 重点销区市场蛋价（销区口径，与又鸟蛋/小鲜农价同类） =====
     mffb_egg_url, mffb_egg_title = mffb_latest("鸡蛋价格行情")
