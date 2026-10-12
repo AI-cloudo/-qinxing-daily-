@@ -847,6 +847,23 @@ def fmt(v):
     return ("%.2f" % v) if isinstance(v, float) else str(v)
 
 
+def lag_days(ds, today=None):
+    """数据日期字符串（M/D、M-D、YYYY-M-D、YYYY年M月D日）距今天数；解析失败返回 None。
+    用于「源站是否停更」的判定与标注（2026-10-12 新增：原逻辑只看是否抓到，抓到的旧文也算"新数据"）。"""
+    if not ds:
+        return None
+    m = re.search(r"(?:(\d{4})\s*[-/年])?\s*(\d{1,2})\s*[-/月]\s*(\d{1,2})\s*日?", str(ds).strip())
+    if not m:
+        return None
+    today = today or datetime.date.today()
+    y = int(m.group(1)) if m.group(1) else today.year
+    try:
+        d0 = datetime.date(y, int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+    return (today - d0).days
+
+
 def main():
     today = datetime.date.today()
     date_cn = "%d年%d月%d日" % (today.year, today.month, today.day)
@@ -1225,9 +1242,9 @@ def main():
     # 用户 2026-10-09 要求：白羽冻品行情必须每天收集，不能一周才一次（信息滞后）。
     # 本表每日随云端三班抓取刷新；辽宁口径仍由周一 AI 校准的周更表承载（表头已标注）。
     hit_fz = frozen_pick(arts)
+    fz_date, fz_rows = "", []      # 预置：未命中时后面的滞后判定也要能安全引用
     if hit_fz:
         _, fz_title, fz_url = hit_fz
-        fz_date, fz_rows = "", []
         try:
             fz_html = fetch(fz_url)
             fz_date = frozen_pub_date(fz_html)
@@ -1479,8 +1496,12 @@ def main():
                 "rows": tbl
             }] + keep
             new_state["sanhuang"] = {r["prov"]: float(re.split(r"-", r["price"])[0]) for r in rows}
-            sec["tag"] = ("快大类分省价 %s 云端抓取（农财宝典）；817肉杂同日抓取（%s）。"
-                          "慢速类(项鸡/阉鸡/竹丝鸡)见下方参考表，非冻品主渠道。" % (ncb_date, d817))
+            _ncb_lag = lag_days(ncb_date, today)
+            _ncb_note = ("（源站滞后期：已滞后%d天，非当日行情）" % _ncb_lag
+                         if _ncb_lag is not None and _ncb_lag >= 2 else "")
+            sec["tag"] = ("快大类分省价 %s 云端抓取（农财宝典）%s；817肉杂同日抓取（%s）。"
+                          "慢速类(项鸡/阉鸡/竹丝鸡)见下方参考表，非冻品主渠道。"
+                          % (ncb_date, _ncb_note, d817))
             print("三黄鸡主表更新: %d 行" % len(tbl))
 
             # 同步维护三黄鸡速览卡（口径：主表快大类均价），并累积历史供趋势使用
@@ -1671,8 +1692,15 @@ def main():
         if avg:
             tips.append("白羽肉鸡：山东棚前均价 %s 元/斤，%s"
                         % (fmt(avg), "低位区间，可分批建仓" if avg < 3.3 else "按需采购，不追高"))
-    # 数据完整性提示：只提示今日确实没抓到新价的板块（原来无条件写"沿用昨日"，即使已抓新也误报）
-    _stale = []
+    # 数据完整性提示：不只看「今日是否抓到」，还要看「抓到的数据日期有多旧」
+    # 2026-10-12 修复：农财宝典 10/8 那期一直被成功解析 → 旧逻辑误报"全部板块均抓到新数据"，
+    # 而页面上的价格其实是 4 天前的。滞后 ≥2 天的源必须点名，避免误导采购决策。
+    _stale, _lagged = [], []
+    for _nm, _ds in (("淘汰鸡/鸡蛋汇总", sum_date), ("三黄鸡农财宝典", ncb_date),
+                     ("817肉杂", d817), ("白羽棚前", bro_date), ("白羽冻品日更", fz_date)):
+        _lg = lag_days(_ds, today)
+        if _lg is not None and _lg >= 2:
+            _lagged.append("%s（%s·滞后%d天）" % (_nm, str(_ds).strip(), _lg))
     if not cull_by_prov and not egg_by_prov:
         _stale.append("淘汰鸡/鸡蛋汇总")
     if not rows:
@@ -1683,9 +1711,15 @@ def main():
         _stale.append("公鸡产区")
     if not broiler_rows:
         _stale.append("白羽")
+    _msgs = []
     if _stale:
-        tips.append("以下板块今日云端未抓到新价（%s），沿用 %s 数据，重要决策前请人工核实"
-                    % ("、".join(_stale), prev_date or "前日"))
+        _msgs.append("以下板块今日云端未抓到新价（%s），沿用 %s 数据"
+                     % ("、".join(_stale), prev_date or "前日"))
+    if _lagged:
+        _msgs.append("以下源站本期尚未发布、页面显示为其最近一期数据：%s"
+                     % "、".join(_lagged))
+    if _msgs:
+        tips.append("%s——相关数值非当日行情，下单前请按行内标注的数据日期核实" % "；".join(_msgs))
     else:
         tips.append("今日全部板块均抓到新数据，无沿用项（生成 %s）" % date_short)
     # ===== 保留 AI 周度研判 block（周一精修写入，整周沿用；下周一 AI 写入新研判时自然替换）=====
