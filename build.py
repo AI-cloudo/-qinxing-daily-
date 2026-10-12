@@ -130,10 +130,14 @@ def build_badges(data):
         elif tab == '研判':
             ds = _each_date(tag)
             md = max(((m_, d_) for m_, d_, _p in ds), key=lambda x: x) if ds else None
-            if '无AI' in tag or '规则' in tag:
+            # 2026-10-12 修正：周研判写入后 tag 形如「AI周度研判 10-12 · 规则提示自动生成 10/11」，
+            # 原判断先命中「规则」→ 角标误显示为"规则研判"，把 AI 研判标没了。改为 AI 优先。
+            if '无AI' in tag:
                 src = '规则研判'
             elif 'AI' in tag or '周度' in tag or '人工' in tag:
                 src = 'AI研判'
+            elif '规则' in tag:
+                src = '规则研判'
             else:
                 src = '研判'
             push(src, md)
