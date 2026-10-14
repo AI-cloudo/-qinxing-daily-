@@ -1090,6 +1090,24 @@ def main():
 
     with open(os.path.join(HERE, "data.json"), encoding="utf-8") as f:
         d = json.load(f)
+    # 快照「上一期」各板块表格：云端网络抖动很常见（2026-10-14 实测一次抖动里
+    # 博亚鸡蛋/博亚淘鸡/Mysteel 分割品三处同时 read timeout），而板块表格每轮是
+    # **整体重建**的 → 抓失败就等于把上一期好表删掉。故失败时用本快照把上一期原样接回。
+    _prev_tables = {i: list(s.get("tables") or []) for i, s in enumerate(d.get("sections") or [])}
+
+    def _carry_prev(sec_i, pred):
+        """抓不到当期时，取上一期同源的表原样接回（不改数值、不新增点）。
+        cap 追加「沿用上一期」字样但不含「停更」等清退关键词，仍由 src_policy 的新鲜度分级决定去留。"""
+        for _t in _prev_tables.get(sec_i, []):
+            if pred(_t):
+                _t = dict(_t)
+                _cap = (_t.get("cap") or "").rstrip("。")
+                if "沿用上一期" not in _cap:
+                    _t["cap"] = ((_cap + "　|　" if _cap else "")
+                                 + "本期未抓到当期更新，沿用上一期；连续多期沿用将按新鲜度分级自动清退。")
+                return _t
+        return None
+
     prev_date = d.get("meta", {}).get("date_cn", "")
     state = {}
     state_path = os.path.join(HERE, "state.json")
@@ -1269,11 +1287,18 @@ def main():
             }]
             sec["tag"] = "%s　|　博亚和讯蛋价 %s" % (sec.get("tag", ""), eg_date or "?")
     else:
-        # 抓不到就清掉停更的 mffb 遗留表，避免 8/28 陈价继续挂在页面上
+        # 抓不到时**不删表**：若上一期已是博亚销区表则沿用；只有页面上还挂着
+        # 已停更 mffb 的遗留「主销区」表（cap 无「博亚和讯」）才清退，避免 8/28 陈价继续挂着。
         sec = d["sections"][1]
-        sec["tables"] = [t for t in sec.get("tables", [])
-                         if "主销区" not in " ".join(str(x) for x in (t.get("headers") or []))]
-        print("博亚和讯鸡蛋: 未抓到当期文章 → 已清退旧「主销区」表")
+        _xq = (lambda t: "主销区" in " ".join(str(x) for x in (t.get("headers") or [])))
+        _carried = _carry_prev(1, lambda t: _xq(t) and "博亚和讯" in (t.get("cap") or ""))
+        sec["tables"] = [t for t in sec.get("tables", []) if not _xq(t)]
+        if _carried:
+            sec["tables"].append(_carried)
+            sec["tag"] = "%s　|　博亚和讯蛋价（沿用上一期）" % (sec.get("tag", ""))
+            print("博亚和讯鸡蛋: 未抓到当期 → 沿用上一期销区表")
+        else:
+            print("博亚和讯鸡蛋: 未抓到当期文章 → 已清退旧 mffb「主销区」表")
 
     # ===== 板块一补充：鸡网 ckexc 横向参照源（红鸡·山东及周边地市）=====
     # 主表不动，参照表并列展示；抓取/解析失败自动跳过，不影响其他板块
@@ -1373,6 +1398,16 @@ def main():
                         % (bj_avg["山东"], cull_avg["山东"], _bd))
         except Exception as e:
             print("[warn] 博亚和讯跨源比对失败:", e)
+    else:
+        # 抓不到（搜索页 read timeout 是云端常见抖动）→ **不删表**，沿用上一期博亚分省表；
+        # 数据日期写在 cap 里，交由 src_policy 的新鲜度分级决定是保留标滞后还是清退。
+        _carried = _carry_prev(0, lambda t: "博亚和讯" in (t.get("cap") or ""))
+        if _carried:
+            sec = d["sections"][0]
+            sec["tables"] = [t for t in sec.get("tables", [])
+                             if "博亚和讯" not in (t.get("cap") or "")] + [_carried]
+            sec["tag"] = "%s　|　博亚和讯（沿用上一期）" % (sec.get("tag", ""))
+            print("博亚和讯淘鸡: 未抓到当期 → 沿用上一期分省表")
 
     # ===== 板块二补充：mffb 重点销区市场蛋价（销区口径，与又鸟蛋/小鲜农价同类） =====
     mffb_egg_url, mffb_egg_title = mffb_latest("鸡蛋价格行情")
@@ -1548,11 +1583,6 @@ def main():
     else:
         print("冻品速览: 未找到当期文章（跳过，不影响其他板块）")
 
-    # ===== 板块五补充2：Mysteel 辽宁屠宰企业冻品【日更】=====
-    # 用户 2026-10-14：白羽分割品「停更的清退、补日更源」。
-    # 原「山东/辽宁中价周更表」（headers[0]=="分割品"）承载辽宁口径，其源已停更
-    # （小明农牧 9/21 后无新期、Mysteel 汇总表付费墙）→ 由 src_policy 整表清退；
-    # 辽宁改用 Mysteel 站内聚合页当日全文快讯重建，粒度到规格，单位元/公斤。
     # ===== 板块五补充2：Mysteel 山东/辽宁屠宰企业冻品【日更】=====
     # 用户 2026-10-14：白羽分割品「停更的清退、补日更源」。
     # 原「山东/辽宁中价周更表」（headers[0]=="分割品"）其源已停更（小明农牧 9/21 后
@@ -1585,8 +1615,23 @@ def main():
         print("Mysteel 分割品(%s): 山东 %d 行 / 辽宁 %d 行"
               % (mf_date, len(mf["rows"].get("山东", [])), len(mf["rows"].get("辽宁", []))))
     else:
-        sec["tables"] = keep
-        print("Mysteel 分割品: 未抓到当期快讯（已清退停更周更表，不影响其他板块）")
+        # 抓不到时**不删表**（云端网络抖动会整页超时，2026-10-14 实测）：
+        # 上一期若已是 Mysteel 日更表则原样沿用；只有页面上还挂着旧周更表才除名。
+        _carried = [t for t in _prev_tables.get(4, []) if "Mysteel" in (t.get("cap") or "")]
+        if _carried:
+            for _t in _carried:
+                _t = dict(_t)
+                _cap = (_t.get("cap") or "").rstrip("。")
+                if "沿用上一期" not in _cap:
+                    _t["cap"] = ((_cap + "　|　" if _cap else "")
+                                 + "本期未抓到当期更新，沿用上一期；连续多期沿用将按新鲜度分级自动清退。")
+                keep.append(_t)
+            sec["tables"] = keep
+            sec["tag"] = "%s　|　分割品日更（沿用上一期）" % (sec.get("tag", ""))
+            print("Mysteel 分割品: 未抓到当期 → 沿用上一期 %d 张日更表" % len(_carried))
+        else:
+            sec["tables"] = keep
+            print("Mysteel 分割品: 未抓到当期快讯（已清退停更周更表，不影响其他板块）")
 
     # ===== 顶栏第4张速览卡「白羽肉鸡」：每日累积历史，卡片才有昨日/3天/7天趋势 =====
     # 之前这张卡由前端临时拼出（只有1个点），导致趋势栏空白、备注无数据源
