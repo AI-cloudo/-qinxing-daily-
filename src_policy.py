@@ -36,6 +36,8 @@ _DATE_CTX = [
     re.compile(r"(\d{1,2})\s*月\s*(\d{1,2})\s*日"),
     re.compile(r"(?:宝典|网|中心|日报|汇总|集团|公司|钢厂|部|源|价)\s*[:：]?\s*"
                r"(\d{1,2})\s*[/\-]\s*(\d{1,2})"),
+    # 表 cap 里的数据日期戳：【日更 10/13】/【日更 10-13】/【分割品日更 10/13】
+    re.compile(r"【[^】]{0,6}日更\s*(\d{1,2})\s*[/\-]\s*(\d{1,2})"),
 ]
 _STOP_MARK = re.compile(r"源站已停更|源已停更|已停更|已停止更新|源站停更|停更源")
 
@@ -81,6 +83,16 @@ def apply_staleness(data, today=None, log=print):
                 stat["purged"] += len(t.get("rows") or [])
                 stat["boards"].add(tab)
                 log("  停更分级[%s]: 整表清退（cap 标注停更）" % tab)
+                continue
+            # 表级：cap 里带数据日期戳（如【日更 10/1】）且已超清退线 → 整表清退。
+            # 用于「源站挂掉、表格靠沿用上一期撑着」的场景，避免陈表长期滞留。
+            dcap = _newest_date(cap, today)
+            if dcap is not None and (today - dcap).days > STALE_PURGE_DAYS:
+                _age = (today - dcap).days
+                stat["purged"] += len(t.get("rows") or [])
+                stat["boards"].add(tab)
+                log("  停更分级[%s]: 整表清退（cap 数据 %d/%d，滞后 %d 天，超 %d 天）"
+                    % (tab, dcap.month, dcap.day, _age, STALE_PURGE_DAYS))
                 continue
             keep_rows, hidden_rows = [], 0
             for r in (t.get("rows") or []):
