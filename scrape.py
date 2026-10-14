@@ -740,6 +740,199 @@ def boyar_trend(chgs):
     return {"t": {"up": "↑", "down": "↓", "flat": "→"}[d], "dir": d}
 
 
+# ===== 博亚和讯《全国部分地区鸡蛋出场价格》→ 鸡蛋分省/分市出场价【日更】 =====
+# 2026-10-14 新增：替代**已停更**的 mffb「主销区蛋价表」（mffb 最新一期停在 8/28，
+# 连续 7 周无新文；页面侧那张「主销区」表是它的遗留快照，无 cap 未被策略扫到）。
+# 本表覆盖 20+ 省 130+ 市，含北京石门/大洋路/回龙观/新发地、上海浦东/浦西、
+# 广东广州/东莞/深圳等销区，自带「昨日 / 今日 / 涨跌」三列，工作日日更。
+BOYAR_EGG_SEARCH = "https://www.boyar.cn/search/%E9%B8%A1%E8%9B%8B.html"   # 鸡蛋
+
+
+def boyar_egg_latest():
+    """博亚和讯搜索页 → 最新一期《YYYY年M月D日全国部分地区鸡蛋出场价格》的 (url, "M/D")"""
+    try:
+        h = fetch(BOYAR_EGG_SEARCH, timeout=25, headers=BOYAR_HEADERS)
+    except Exception as e:
+        print("[warn] 博亚和讯鸡蛋搜索页抓取失败:", e)
+        return None, ""
+    if not h:
+        return None, ""
+    cands = []
+    for m in re.finditer(r'href="(/article/(\d+)\.html)"[^>]*>(.{0,300}?)</a>', h, re.S):
+        u, aid, inner = m.group(1), m.group(2), m.group(3)
+        txt = re.sub(r"<[^>]+>", "", inner).strip()
+        if "鸡蛋" not in txt or "出场价" not in txt:
+            continue
+        dm = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", txt)
+        if not dm:
+            continue
+        cands.append((int(aid), "https://www.boyar.cn" + u,
+                      "%d/%d" % (int(dm.group(2)), int(dm.group(3)))))
+    if not cands:
+        return None, ""
+    cands.sort(key=lambda x: x[0], reverse=True)
+    return cands[0][1], cands[0][2]
+
+
+def parse_boyar_egg(html):
+    """博亚鸡蛋出场价表 → [{"prov","city","breed","prev","cur","chg"}]
+    省份列 rowspan 跨行，其后各行只有 5 个 td（省份沿用上一行）。"""
+    rows, prov = [], ""
+    num = re.compile(r"^\d+(?:\.\d+)?$")
+    for tr in re.findall(r"<tr.*?</tr>", html, re.S):
+        tds = re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S)
+        cells = [re.sub(r"<[^>]+>", "", c).replace("&nbsp;", " ").strip() for c in tds]
+        if len(cells) == 6 and num.match(cells[3] or "") and num.match(cells[4] or ""):
+            prov = cells[0]
+            rows.append({"prov": prov, "city": cells[1], "breed": cells[2],
+                         "prev": cells[3], "cur": cells[4], "chg": cells[5]})
+        elif len(cells) == 5 and prov and num.match(cells[2] or "") and num.match(cells[3] or ""):
+            rows.append({"prov": prov, "city": cells[0], "breed": cells[1],
+                         "prev": cells[2], "cur": cells[3], "chg": cells[4]})
+    return rows
+
+
+# 销区代表（用户是冻品采购方，看销区蛋价了解终端走货；北京/上海/广东为一贯口径）
+EGG_XIAOQU = ["北京市", "上海市", "广东省"]
+EGG_XIAOQU_SRC = "博亚和讯《全国部分地区鸡蛋出场价格》"
+
+
+# ===== Mysteel《辽宁屠宰企业白羽肉鸡X类冻品》→ 辽宁冻品分规格中间价【日更】 =====
+# 2026-10-14 新增：用户要求白羽分割品「停更的清退、补日更源」。
+# 具体文章页（ncp.mysteel.com/a/...）正文有付费墙、只露前 3-4 行，但站内聚合页
+# www.mysteel.com/hot/1585859.html（肉鸡实时行情）会**全文转载**当日的
+# 【爪类/胸类/翅类/腿类/副产】五篇快讯，含「X中间价N.NN元/公斤」，无需登录即可读。
+# 用它承接原「山东/辽宁中价周更表」里的**辽宁口径**（山东口径已由鸡病专业网日更覆盖）。
+MYSTEEL_FG_LIST = "https://jiye.mysteel.com/rjfgp/article/p-4862----071202---------1.html"
+MYSTEEL_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"}
+
+_MY_CATS = ["爪类", "胸类", "翅类", "腿类", "副产"]
+_MY_PROV = [("山东", "山东屠宰企业"), ("辽宁", "辽宁屠宰企业")]
+# 展示用核心规格（源站规格更多，按冻品采购常用项挑选，控制手机端表格长度）
+_MY_SPECS = {
+    ("山东", "爪类"): ["小凤爪", "大凤爪", "30-40小爪", "40-50中爪", "50-60大爪"],
+    ("山东", "胸类"): ["单冻大胸", "板冻大胸", "板冻小胸"],
+    ("山东", "翅类"): ["30以下翅中", "30-40翅中", "40以上翅中"],
+    ("山东", "腿类"): ["80-100琵琶腿", "带皮腿肉"],
+    ("山东", "副产"): ["大脖", "中脖", "大骨架", "鸡胗", "鸡心", "大板肝"],
+    ("辽宁", "爪类"): ["小凤爪", "大凤爪", "30-40爪", "40-50爪", "50-60爪"],
+    ("辽宁", "胸类"): ["单冻大胸", "板冻大胸", "板冻小胸"],
+    ("辽宁", "翅类"): ["30-40翅中", "40-50翅中", "50以上翅中", "小全翅", "大全翅"],
+    ("辽宁", "腿类"): ["80-100琵琶腿", "带皮腿肉"],
+    ("辽宁", "副产"): ["大脖", "中脖", "小脖", "大骨架", "叉骨", "大鸡胗", "小鸡胗",
+                     "鸡心", "大板肝"],
+}
+_CAT_GROUP = {"爪类": "鸡爪", "胸类": "鸡胸", "翅类": "鸡翅", "腿类": "鸡腿", "副产": "副产"}
+# 解析用全量规格白名单（含未在页面展示的项，避免散文里「其中XX」这类前缀把名称带偏）
+_MY_ALL = {
+    ("山东", "爪类"): ["小凤爪", "大凤爪", "30-40小爪", "40-50中爪", "50-60大爪", "60-70大爪", "70以上大爪"],
+    ("山东", "胸类"): ["单冻大胸", "毛胸", "板冻大胸", "板冻小胸", "胸皮"],
+    ("山东", "翅类"): ["30以下翅中", "30-40翅中", "40以上翅中", "30-40翅根", "40-50翅根", "翅尖", "小全翅", "大全翅"],
+    ("山东", "腿类"): ["70-80腿肉", "80-100琵琶腿", "100-120琵琶腿", "120-140琵琶腿", "160-180琵琶腿", "5连腿", "带皮腿肉", "排腿"],
+    ("山东", "副产"): ["大脖", "中脖", "小脖", "脖皮", "大骨架", "叉骨", "鸡胗", "鸡心", "大板肝"],
+    ("辽宁", "爪类"): ["小凤爪", "大凤爪", "30-40爪", "40-50爪", "50-60爪", "60-70爪", "70以上爪"],
+    ("辽宁", "胸类"): ["单冻大胸", "毛胸", "板冻大胸", "板冻小胸", "胸皮"],
+    ("辽宁", "翅类"): ["30-40翅中", "40-50翅中", "50以上翅中", "30-40翅根", "40-50翅根", "翅尖", "小全翅", "大全翅"],
+    ("辽宁", "腿类"): ["80-100琵琶腿", "100-120琵琶腿", "120-140琵琶腿", "160-180琵琶腿", "带皮腿肉", "排腿"],
+    ("辽宁", "副产"): ["大脖", "中脖", "小脖", "脖皮", "大骨架", "叉骨", "大鸡胗", "小鸡胗", "鸡心", "大板肝"],
+}
+
+
+def _my_parse_article(html, prov, cat):
+    """一篇文章 → {"规格": [中间价, 涨跌]}。
+    数据来源＝页头「智能摘要」+ 可见表格片段（原文正文有登录墙，只露前 3-4 行）。
+    只输出当日确实报价的规格，未报价项不返回（绝不沿用旧值）。"""
+    ai_m = re.search(r'<pre class="ai-summary__text"[^>]*>([\s\S]*?)</pre>', html)
+    ai = re.sub(r"<[^>]+>", "", ai_m.group(1)) if ai_m else ""
+    i = html.find("单位：元/公斤")
+    tb = html[i:i + 900] if i > 0 else ""
+    tb = re.sub(r"<[^>]+>", " ", tb).split("免责声明")[0]
+    specs = _MY_ALL.get((prov, cat), [])
+    vals = {}
+    # ① 可见表格：规格 最低价 最高价 中间价 涨跌
+    for m in re.finditer(r"([\u4e00-\u9fa5A-Za-z0-9\-]{2,12})\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+"
+                         r"(\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)", tb):
+        nm = m.group(1)
+        if nm in specs and nm not in vals:
+            vals[nm] = [float(m.group(4)), float(m.group(5))]
+    # ② 智能摘要散文：规格…N.NN元/公斤（允许中间夹「中间价/上涨0.10元至」等）
+    for sp in specs:
+        if sp in vals:
+            continue
+        mm = re.search(re.escape(sp) + r"[^。；，]{0,16}?(\d+(?:\.\d+)?)元/公斤", ai)
+        if mm:
+            vals[sp] = [float(mm.group(1)), None]
+    # ③ 涨跌方向：规格…(上涨|下跌)D 元
+    for sp in list(vals):
+        if vals[sp][1] is not None:
+            continue
+        mm = re.search(re.escape(sp) + r"[^。；，]{0,12}?(上涨|下跌|涨|跌|落)(\d+(?:\.\d+)?)元", ai)
+        vals[sp][1] = (float(mm.group(2)) * (1 if mm.group(1) in ("上涨", "涨") else -1)) if mm else 0.0
+    return vals
+
+
+def mysteel_frozen_daily():
+    """白羽分割品（山东+辽宁）日更快讯 → {"date":"M/D", "rows":{省份:[[品类,规格,中间价,涨跌],...]}}
+    抓不到返回 None。列表页稳定日更；每省每品类取当天最新一篇。"""
+    try:
+        h = fetch(MYSTEEL_FG_LIST, timeout=25, headers=MYSTEEL_HEADERS)
+    except Exception as e:
+        print("[warn] Mysteel 分割品列表页抓取失败:", e)
+        return None
+    if not h:
+        return None
+    picked, seen = {}, set()
+    for m in re.finditer(r'<a[^>]+href="(https?://[a-z.]*mysteel\.com/a/(\d+)/[0-9A-F]+\.html)"'
+                         r'[^>]*>([\s\S]{0,200}?)</a>', h):
+        url, aid, title = m.group(1), int(m.group(2)), re.sub(r"<[^>]+>", "", m.group(3)).strip()
+        if url in seen:
+            continue
+        seen.add(url)
+        for prov, key in _MY_PROV:
+            if key not in title:
+                continue
+            cat = next((c for c in _MY_CATS if c in title), None)
+            if not cat:
+                continue
+            k = (prov, cat)
+            if k not in picked or aid > picked[k][0]:
+                picked[k] = (aid, url)
+    if not picked:
+        print("Mysteel 分割品: 列表页未匹配到屠宰企业快讯")
+        return None
+    out, dates = {}, []
+    # 先按 省份 → 品类 顺序抓取，保证输出的行序与 _MY_SPECS 的展示顺序一致
+    for prov, _ in _MY_PROV:
+        for cat in _MY_CATS:
+            picked_url = picked.get((prov, cat))
+            if not picked_url:
+                continue
+            url = picked_url[1]
+            try:
+                ah = fetch(url, timeout=25, headers=MYSTEEL_HEADERS)
+            except Exception as e:
+                print("[warn] Mysteel 快讯抓取失败 %s:" % url, e)
+                continue
+            got = _my_parse_article(ah, prov, cat)
+            if not got:
+                continue
+            dm = re.search(r"(\d{1,2})月(\d{1,2})日", ah)
+            if dm:
+                dates.append((int(dm.group(1)), int(dm.group(2))))
+            for sp in _MY_SPECS.get((prov, cat), []):
+                if sp not in got:
+                    continue
+                val, chg = got[sp]
+                out.setdefault(prov, []).append(
+                    [_CAT_GROUP[cat], sp, fmt(val),
+                     trend_cell(val, round(val - (chg or 0), 2))])
+    if not out:
+        return None
+    dmax = max(dates, key=lambda x: x[0] * 100 + x[1]) if dates else None
+    return {"date": "%d/%d" % dmax if dmax else "", "rows": out}
+
+
 # ===== 鸡网 ckexc（板块一「老母鸡/淘汰鸡」横向参照源 v2，替代 meat360）=====
 # meat360 全站反爬（本机与云端均 403/502）弃用；ckexc 实测可直连。
 # ckexc 每日发《YYYY-M-DD 全国淘汰鸡参考价格》：红鸡/粉鸡分省分地市，活禽/屠宰双口径+涨跌，
@@ -1016,6 +1209,58 @@ def main():
         }
         sec["tag"] = "数据日期 %s · 鸡病专业网 · 云端自动更新" % sum_date
 
+    # ===== 板块二补充：博亚和讯《全国部分地区鸡蛋出场价格》→ 销区蛋价【日更】 =====
+    # 2026-10-14：原「主销区」表是**已停更的 mffb** 遗留快照（8/28 后再无新文，
+    # 且该表无 cap，未被 src_policy 的整表规则扫到）→ 按用户「停更源一律清退、
+    # 补日更源」改用博亚和讯分省出场价里的销区城市重建。抓不到则整表不出现。
+    eg_url, eg_date = boyar_egg_latest()
+    eg_rows_raw = []
+    if eg_url:
+        try:
+            _eh = fetch(eg_url, headers=BOYAR_HEADERS)
+            eg_rows_raw = parse_boyar_egg(_eh) if _eh else []
+        except Exception as e:
+            print("[warn] 博亚和讯鸡蛋出场价抓取失败:", e)
+    print("博亚和讯鸡蛋(%s): %d 行" % (eg_date, len(eg_rows_raw)))
+    if eg_rows_raw:
+        xq_rows = []
+        for p in EGG_XIAOQU:
+            _rs = [r for r in eg_rows_raw if r["prov"] == p]
+            if not _rs:
+                continue
+            _vals, _chgs, _cities, _breeds = [], [], [], set()
+            for r in _rs:
+                try:
+                    _vals.append(float(r["cur"]))
+                except ValueError:
+                    continue
+                _chgs.append(float(r["chg"] or 0))
+                _cities.append(r["city"].rstrip("市区州"))
+                _breeds.add(r["breed"])
+            if not _vals:
+                continue
+            _avg = round(sum(_vals) / len(_vals), 2)
+            note = "%s（%s）" % ("/".join(_cities[:5]) + ("等%d市" % len(_cities) if len(_cities) > 5 else ""),
+                                 "/".join(sorted(_breeds)))
+            xq_rows.append([p.rstrip("市省"), fmt(_avg), boyar_trend(_chgs), note])
+        if xq_rows:
+            sec = d["sections"][1]
+            keep = [t for t in sec.get("tables", [])
+                    if "主销区" not in " ".join(str(x) for x in (t.get("headers") or []))]
+            sec["tables"] = keep + [{
+                "headers": ["主销区", "均价（元/斤）", "涨跌", "覆盖市场"],
+                "rows": xq_rows,
+                "cap": ("鸡蛋销区均价【日更 %s】· 源：%s（原 mffb 主销区表已因停更清退）"
+                        % (eg_date or "?", EGG_XIAOQU_SRC)),
+            }]
+            sec["tag"] = "%s　|　博亚和讯蛋价 %s" % (sec.get("tag", ""), eg_date or "?")
+    else:
+        # 抓不到就清掉停更的 mffb 遗留表，避免 8/28 陈价继续挂在页面上
+        sec = d["sections"][1]
+        sec["tables"] = [t for t in sec.get("tables", [])
+                         if "主销区" not in " ".join(str(x) for x in (t.get("headers") or []))]
+        print("博亚和讯鸡蛋: 未抓到当期文章 → 已清退旧「主销区」表")
+
     # ===== 板块一补充：鸡网 ckexc 横向参照源（红鸡·山东及周边地市）=====
     # 主表不动，参照表并列展示；抓取/解析失败自动跳过，不影响其他板块
     ck_rows, ck_date = {}, ""
@@ -1281,13 +1526,53 @@ def main():
                 "headers": ["品类", "规格（山东成交区间·元/公斤）", "成交区间", "区间中值", "较昨日"],
                 "rows": fz_tbl,
                 "cap": ("白羽分割品·山东冻品成交价【日更 %s】· 源：鸡病专业网《山东地区鸡苗-肉鸡冻品市场动态速览》"
-                        "；辽宁口径见下方周更表。" % (fz_date or "?")),
+                        "；山东/辽宁分规格中间价见下方 Mysteel 日更表。" % (fz_date or "?")),
             })
             sec["tables"] = keep
             new_state["frozen_sd"] = {r["name"]: r["mid"] for r in fz_rows}
             sec["tag"] = "%s　|　冻品日更 %s" % (sec.get("tag", ""), fz_date or "?")
     else:
         print("冻品速览: 未找到当期文章（跳过，不影响其他板块）")
+
+    # ===== 板块五补充2：Mysteel 辽宁屠宰企业冻品【日更】=====
+    # 用户 2026-10-14：白羽分割品「停更的清退、补日更源」。
+    # 原「山东/辽宁中价周更表」（headers[0]=="分割品"）承载辽宁口径，其源已停更
+    # （小明农牧 9/21 后无新期、Mysteel 汇总表付费墙）→ 由 src_policy 整表清退；
+    # 辽宁改用 Mysteel 站内聚合页当日全文快讯重建，粒度到规格，单位元/公斤。
+    # ===== 板块五补充2：Mysteel 山东/辽宁屠宰企业冻品【日更】=====
+    # 用户 2026-10-14：白羽分割品「停更的清退、补日更源」。
+    # 原「山东/辽宁中价周更表」（headers[0]=="分割品"）其源已停更（小明农牧 9/21 后
+    # 无新期、Mysteel 汇总表付费墙）→ 按规则整表清退；改用 Mysteel 分割品栏目当天
+    # 山东/辽宁各 5 篇快讯重建，粒度到规格、单位元/公斤，山东/辽宁各一张表。
+    mf = mysteel_frozen_daily()
+    mf_date = mf["date"] if mf else ""
+    # 无论是否抓到，都先清掉遗留的周更表（不能把 9/21 旧值留在页面上）
+    sec = d["sections"][4]
+    keep = [t for t in sec.get("tables", [])
+            if (t.get("headers") or [""])[0] != "分割品"]
+    if mf and mf["rows"]:
+        base = next((i for i, t in enumerate(keep)
+                     if (t.get("headers") or [""])[0] == "品类"), -1) + 1
+        new_tables = []
+        for prov in ("山东", "辽宁"):
+            rows = mf["rows"].get(prov)
+            if not rows:
+                continue
+            new_tables.append({
+                "headers": ["品类", "规格", "%s中间价（元/公斤）" % prov, "涨跌"],
+                "rows": rows,
+                "cap": ("白羽分割品·%s冻品中间价【日更 %s】· 源：Mysteel《%s屠宰企业白羽肉鸡"
+                        "爪/胸/翅/腿/副产冻品》当日快讯（原文有登录墙，数据取自页头智能摘要+可见表格）；"
+                        "仅列当日实际报价规格，未报价项不沿用旧值。" % (prov, mf_date or "?", prov)),
+            })
+        keep[base:base] = new_tables
+        sec["tables"] = keep
+        sec["tag"] = "%s　|　分割品日更 %s" % (sec.get("tag", ""), mf_date or "?")
+        print("Mysteel 分割品(%s): 山东 %d 行 / 辽宁 %d 行"
+              % (mf_date, len(mf["rows"].get("山东", [])), len(mf["rows"].get("辽宁", []))))
+    else:
+        sec["tables"] = keep
+        print("Mysteel 分割品: 未抓到当期快讯（已清退停更周更表，不影响其他板块）")
 
     # ===== 顶栏第4张速览卡「白羽肉鸡」：每日累积历史，卡片才有昨日/3天/7天趋势 =====
     # 之前这张卡由前端临时拼出（只有1个点），导致趋势栏空白、备注无数据源
@@ -1952,6 +2237,23 @@ def main():
                   % (_pol.get("updated", "?"), "、".join(sorted(_hit)) or "无（数据已是干净的）"))
         else:
             print("[policy] 未读到 src_policy.json，本次不做停更源清理")
+        # 停更分级（用户 2026-10-14 立规）：>10 天清退、7~10 天不展示、行内标停更一律清退。
+        # 阈值写死在 src_policy.py，不依赖 json，避免策略文件缺失时规则失效。
+        _st = src_policy.apply_staleness(d, today=today)
+        if _st["purged"] or _st["hidden"]:
+            print("[policy] 停更分级：清退 %d 行 / 暂不展示 %d 行（沉源板块：%s）"
+                  % (_st["purged"], _st["hidden"], "、".join(sorted(_st["boards"])) or "无"))
+        if _st["boards"] and _pol:
+            try:
+                _f = os.path.join(HERE, "src_policy.json")
+                with open(_f, encoding="utf-8") as _fh:
+                    _pj = json.load(_fh)
+                _pj["needs_replacement"] = sorted(set(_pj.get("needs_replacement") or [])
+                                                  | _st["boards"])
+                with open(_f, "w", encoding="utf-8") as _fh:
+                    json.dump(_pj, _fh, ensure_ascii=False, indent=2)
+            except Exception as _e:
+                print("[warn] needs_replacement 回写失败:", _e)
     except Exception as e:
         print("[warn] 停更源策略执行失败（不阻断抓取）:", e)
 
