@@ -207,7 +207,18 @@ def title_date(title):
 
 
 def mffb_latest(keyword):
-    """从 mffb 首页找当天标题含 keyword 的最新文章，返回 (url, title)"""
+    """从 mffb 首页找当天标题含 keyword 的最新文章，返回 (url, title)
+
+    ⛔ 2026-10-14 停更源清退（用户拍板「停更的数据源一律不采用、不展示、删除」）：
+    mffb 最新一期停在 8/28（连续 7 周无新文），仍在抓取只会把 8/28 的陈价
+    当成新数据写进页面（板块二销区表 / 板块五分市表），故直接停用抓取，
+    返回空值让下游按「本板块未抓到」处理。若该站日后复刊，删掉下面这行即可恢复。
+    """
+    return None, ""
+
+
+def _mffb_latest_disabled(keyword):
+    """（停用）原 mffb 抓取实现，保留备查"""
     home = None
     for _ in range(3):  # mffb 偶发 SSL 中断，重试
         try:
@@ -1412,13 +1423,12 @@ def main():
     if live_rows:
         sec = d["sections"][3]
         keep_tables = sec.get("tables", [])
-        # 保留黑凤公鸡等沿用行（若该地区当天已抓到新报价，则以新数据为准，不再重复挂旧行）
-        _live_regions = set(r[0] for r in live_rows)
-        carry_rows = [r for r in keep_tables[0]["rows"]
-                      if "黑凤" in str(r) and r[0] not in _live_regions]
+        # ⛔ 2026-10-14 停更源清退：不再沿用黑凤公鸡旧行（源停在 10/3/9/6），
+        # 黑凤及其冻品批发表已按「停更源不采用、不展示、删除」规则清除。
         live_tables = [{"headers": ["地区", "品种", "棚前价（元/斤）", "环比", "数据日期"],
-                        "rows": live_rows + carry_rows}]
-        sec["tables"] = live_tables + keep_tables[1:]
+                        "rows": live_rows}]
+        sec["tables"] = live_tables + [t for t in keep_tables[1:]
+                                       if "冻品批发价" not in " ".join(str(x) for x in t.get("headers", []))]
         # 角标需要「数据日期」字样才能标出新鲜度（build.py build_badges 按此提取）
         # 各产区源文更新节奏不一（同一天可能混有新老两期），取**最新**数据日期——
         # 与用户「要看最新盘面、别显示旧日期」的诉求一致（2026-10-14）
@@ -1427,12 +1437,13 @@ def main():
         _live_date = (max(_lds, key=lambda x: tuple(int(v) for v in x.split("/")))
                       if _lds else "")
         sec["tag"] = ("活禽棚前价 · 数据日期 %s · 数据源：鸡病专业网各产区日报 · 云端自动更新"
-                      "（黑凤公鸡等源站未日更项，以行内注记日期为准）" % _live_date)
+                      % _live_date)
         sec["analysis"] = {
             "title": "📊 公鸡分析（各产区标注数据日期）",
             "up": ["今日云端抓取 %d 个产区报价，每行标注数据日期" % len(live_rows),
-                   "黑凤公鸡（开封/邢台）等源站未日更项：活禽按行内注记（源站或AI校准日期），"
-                   "冻品批发为历史基准，采价前请电话核实"],
+                   "停更源已清退：黑凤公鸡活禽（源停 10/3、邢台 9/6）及其冻品批发基准（8/27）、"
+                   "579小公鸡/黄脚大冠/青脚公鸡冻品（9/21）均无新一期，已按「停更源不采用、"
+                   "不展示」规则从本板块移除；如需采购请直接电话询厂实价"],
             "ref": ["麻公/黄花公产区价差大，跨区采购先算运费",
                     "中元节/中秋等节前备货常推高价，节后常有回调"],
         }
@@ -1507,8 +1518,7 @@ def main():
             ck["price"] = fmt(_kavg)
             ck["wt_title"] = "近10日数据点（各省公鸡棚前均价）"
             ck["note"] = ("各省公鸡棚前价 %d 产区均价 %s 元/斤（区间 %s-%s，%s数据）· "
-                          "数据源：鸡病专业网各产区日报 · 云端每日更新"
-                          "（黑凤公鸡等源站未日更项不参与均价，见下方表格）"
+                          "数据源：鸡病专业网各产区日报 · 云端每日更新（停更源已清退）"
                           % (len(_krows), fmt(_kavg), fmt(min(x[2] for x in _krows)),
                              fmt(max(x[2] for x in _krows)), point))
             print("公鸡速览卡: %s 元/斤 dir=%s（%s数据，%d产区），历史 %d 天"
@@ -1647,8 +1657,7 @@ def main():
                 sh["dir"] = "flat"
             sh["price"] = fmt(sh_avg)
             sh["note"] = ("冻品流通口径·快大类活禽出栏：%d省均价 %s 元/斤（区间 %s-%s）；"
-                          "数据源：农财宝典全国鸡价 %s。注意：三黄项/矮脚黄项 7.6-8.5 为活禽鲜销，"
-                          "非冻品渠道，勿按此价核算"
+                          "数据源：农财宝典全国鸡价 %s（活禽鲜销参考源已停更，按规则清退）"
                           % (len(rows), fmt(sh_avg), fmt(min(mids)), fmt(max(mids)), ncb_date))
             print("三黄鸡速览卡: %s 元/斤 dir=%s（%s数据），历史 %d 天"
                   % (sh["price"], sh["dir"], point, len(ch["dates"])))
@@ -1691,7 +1700,8 @@ def main():
                 ] + ([_up2] if _up2 else []),
                 "ref": [
                     "快大类出栏价低=屠宰原料成本低：三黄整鸡冻品批发参考 4.9-5.25 元/斤，关注屠宰开工与冻品报价联动",
-                    "三黄项/矮脚黄项 7.6-8.5 属活禽鲜销渠道（非冻品口径），勿按高价核算冻品成本",
+                    "活禽鲜销参考（三黄项/矮脚黄项 7.6-8.5）源站已停更 30+ 天，按「停更源不采用、"
+                    "不展示」规则已从本板块清退，不作为冻品成本参考",
                     "农财宝典为华东/华南产区口径；山东本省快大类以鸡病兄弟品种棚前表为准，两源可交叉印证",
                 ],
             }
@@ -1924,8 +1934,26 @@ def main():
     except Exception as e:
         print("[warn] 更新时间写入失败:", e)
         d["meta"].setdefault("content_date", today.isoformat())
-    d["footer"] = ("云端自动更新 · 数据源：鸡病专业网 jbzyw.com / mffb.com.cn / 鸡网 ckexc.com · "
+    d["footer"] = ("云端自动更新 · 数据源：鸡病专业网 jbzyw.com / 鸡网 ckexc.com / 博亚和讯 boyar.cn · "
                    "页面生成 %s %s · 手机页面每2分钟自动检查新版" % (date_cn, weekday))
+
+    # ===== 数据源策略执行（2026-10-14 用户拍板）=====
+    # 「停更源一律不采用、不展示、删除」：在写 data.json 之前就把停更源的表/行真删，
+    # 这样页面快照与前端实时拉取到的 data.json 都不会再有陈数据。
+    # 策略文件 src_policy.json 由每周一 8 点 AI 精修自动化判定维护。
+    try:
+        import src_policy
+        _pol = src_policy.load_policy(HERE)
+        if _pol:
+            _hit = src_policy.apply_policy(d, _pol)
+            if _hit:
+                src_policy.scrub_text(d, _hit)
+            print("[policy] 策略执行完毕（updated %s）：停更源命中 %s"
+                  % (_pol.get("updated", "?"), "、".join(sorted(_hit)) or "无（数据已是干净的）"))
+        else:
+            print("[policy] 未读到 src_policy.json，本次不做停更源清理")
+    except Exception as e:
+        print("[warn] 停更源策略执行失败（不阻断抓取）:", e)
 
     # ===== 保存 =====
     # new_state 在上方各板块里逐步填充（如 ncb_seed / sanhuang），这里补齐基础字段
