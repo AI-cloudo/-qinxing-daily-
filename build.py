@@ -183,6 +183,13 @@ for _s in (data.get('sections') or []):        # 停更/间断源角标同步剔
 # （tag/analysis 不渲染，保留给周一 AI 周研判作全源参考）
 src_policy.scrub_text(data, _hidden_words)
 
+# 停更分级（用户 2026-10-14 立规）：>10 天清退、7~10 天不展示、行内标停更一律清退。
+# 与 scrape.py 用同一套阈值（写死在 src_policy.py），保证页面快照与云端 data.json 一致。
+_st = src_policy.apply_staleness(data)
+if _st['purged'] or _st['hidden']:
+    print('停更分级: 清退 %d 行 / 暂不展示 %d 行（沉源板块：%s）'
+          % (_st['purged'], _st['hidden'], '、'.join(sorted(_st['boards'])) or '无'))
+
 # 构造第四张速览卡：白羽肉鸡（云端 scrape.py 已维护带历史的卡时，直接沿用不覆盖）
 def avg_price(s):
     nums = re.findall(r'\d+\.?\d*', str(s))
