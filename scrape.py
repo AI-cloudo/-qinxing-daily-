@@ -856,19 +856,33 @@ def _my_parse_article(html, prov, cat):
         nm = m.group(1)
         if nm in specs and nm not in vals:
             vals[nm] = [float(m.group(4)), float(m.group(5))]
-    # ② 智能摘要散文：规格…N.NN元/公斤（允许中间夹「中间价/上涨0.10元至」等）
+    # ② 智能摘要散文：规格…N.NN元/公斤
+    # 【坑·2026-10-14 实测】源站有个别条目只写涨跌、不写价（例「…50以上翅中下跌0.10元/公斤…」），
+    # 泛化取值会把涨跌值 0.10 当成中间价（线上曾出现「辽宁 50以上翅中 0.10」这种显然错值）。
+    # 两道闸：a) 规格与数值之间出现「涨/跌」→ 判为涨跌值，跳过并继续找下一处；
+    #          b) 值 < 1.0 元/公斤 → 白羽分割品最便宜的项（大脖/脖皮）也在 2 元/公斤以上，一律视为误取。
+    # 全篇找不到合法报价 → 该规格当日不输出（绝不沿用旧值）。
     for sp in specs:
         if sp in vals:
             continue
-        mm = re.search(re.escape(sp) + r"[^。；，]{0,16}?(\d+(?:\.\d+)?)元/公斤", ai)
-        if mm:
-            vals[sp] = [float(mm.group(1)), None]
-    # ③ 涨跌方向：规格…(上涨|下跌)D 元
+        for mm in re.finditer(re.escape(sp) + r"([^。；，]{0,16}?)(\d+(?:\.\d+)?)元/公斤", ai):
+            gap, px = mm.group(1), float(mm.group(2))
+            if re.search(r"[涨跌]", gap) or px < 1.0:
+                continue
+            vals[sp] = [px, None]
+            break
+    # ③ 涨跌方向：规格…(上涨|下跌|…)D 元
+    # 源站常写「规格价39.35元/公斤，较上一工作日下跌0.10元/公斤」，故允许间隔跨「，」（上限 24 字）；
+    # 但若间隔里混入**同品类其他规格名**，说明已串到下一规格，跳过（防串味）。
     for sp in list(vals):
         if vals[sp][1] is not None:
             continue
-        mm = re.search(re.escape(sp) + r"[^。；，]{0,12}?(上涨|下跌|涨|跌|落)(\d+(?:\.\d+)?)元", ai)
-        vals[sp][1] = (float(mm.group(2)) * (1 if mm.group(1) in ("上涨", "涨") else -1)) if mm else 0.0
+        vals[sp][1] = 0.0
+        for mm in re.finditer(re.escape(sp) + r"([^。；]{0,24}?)(上涨|下跌|涨|跌|落)(\d+(?:\.\d+)?)元", ai):
+            if any(o != sp and o in mm.group(1) for o in specs):
+                continue
+            vals[sp][1] = float(mm.group(3)) * (1 if mm.group(2) in ("上涨", "涨") else -1)
+            break
     return vals
 
 
