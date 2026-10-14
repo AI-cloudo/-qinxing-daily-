@@ -1419,8 +1419,15 @@ def main():
         live_tables = [{"headers": ["地区", "品种", "棚前价（元/斤）", "环比", "数据日期"],
                         "rows": live_rows + carry_rows}]
         sec["tables"] = live_tables + keep_tables[1:]
-        sec["tag"] = ("活禽棚前价 · 数据源：鸡病专业网各产区日报 · 云端自动更新"
-                      "（黑凤公鸡等源站未日更项，以行内注记日期为准）")
+        # 角标需要「数据日期」字样才能标出新鲜度（build.py build_badges 按此提取）
+        # 各产区源文更新节奏不一（同一天可能混有新老两期），取**最新**数据日期——
+        # 与用户「要看最新盘面、别显示旧日期」的诉求一致（2026-10-14）
+        _lds = [re.search(r"数据(\d+/\d+)", str(r[4])).group(1)
+                for r in live_rows if re.search(r"数据(\d+/\d+)", str(r[4]))]
+        _live_date = (max(_lds, key=lambda x: tuple(int(v) for v in x.split("/")))
+                      if _lds else "")
+        sec["tag"] = ("活禽棚前价 · 数据日期 %s · 数据源：鸡病专业网各产区日报 · 云端自动更新"
+                      "（黑凤公鸡等源站未日更项，以行内注记日期为准）" % _live_date)
         sec["analysis"] = {
             "title": "📊 公鸡分析（各产区标注数据日期）",
             "up": ["今日云端抓取 %d 个产区报价，每行标注数据日期" % len(live_rows),
@@ -1429,6 +1436,87 @@ def main():
             "ref": ["麻公/黄花公产区价差大，跨区采购先算运费",
                     "中元节/中秋等节前备货常推高价，节后常有回调"],
         }
+
+    # ===== 顶栏第3张速览卡「公鸡」：改为「各省公鸡棚前价」日更（2026-10-14 用户要求）=====
+    # 背景：此卡原为"孤儿卡"——云端从无构建/追加逻辑，走势图停更于 8/28（仅5点），
+    # 主价长期停留在农财宝典 9/30 的"浙江矮脚黄公鸡"（活禽鲜销口径），只能靠周一 AI 手改，
+    # 导致用户看到 9/30 陈数据。现与淘汰鸡卡同口径：各省公鸡棚前价 → 均价 → 每日追加走势点。
+    # 数据源复用板块四已抓到的鸡病专业网各产区日报（live_rows），不新增外部依赖。
+    try:
+        _krows = []
+        for _r in live_rows:
+            _nm, _pv, _dt = str(_r[1]), str(_r[2]), str(_r[4])
+            if "公" not in _nm:
+                continue                        # 只取公鸡类（青脚麻公鸡/大红公鸡/黄花公鸡/优公/黑凤公鸡）
+            if "滞后" in _dt or "未日更" in _dt:
+                continue                        # 源站未日更项（黑凤等）不参与均价，避免连续同值拖成"假横盘"
+            _nums = [float(x) for x in re.findall(r"\d+\.?\d*", _pv)]
+            if not _nums:
+                continue
+            _km = re.search(r"(\d+)/(\d+)", _dt)
+            _krows.append((_r[0], _nm, sum(_nums) / len(_nums), _km.group(0) if _km else ""))
+        if _krows:
+            _kavg = round(sum(x[2] for x in _krows) / len(_krows), 2)
+            _kds = [x[3] for x in _krows if x[3]]
+            # 多产区源文更新节奏不一，取最新日期（与板块四角标同口径，避免两处日期打架）
+            _kdate = (max(_kds, key=lambda x: tuple(int(v) for v in x.split("/")))
+                      if _kds else "")
+            cards = d.setdefault("trend_cards", [])
+            ck = None
+            for c in cards:
+                if "公鸡" in (c.get("name") or ""):
+                    ck = c
+                    break
+            if ck is None:
+                ck = {"name": "公鸡", "unit": "元/斤"}
+                cards.append(ck)
+            ch = ck.setdefault("chart", {})
+            _SNAME = "各省公鸡棚前均价"
+            # 口径切换（浙江矮脚黄公鸡 → 各省公鸡棚前均价）时重置序列，两个口径绝不混画
+            if not ch.get("series") or (ch["series"][0].get("name") or "") != _SNAME:
+                ch["series"] = [{"name": _SNAME, "style": "solid",
+                                 "show_points": True, "values": []}]
+                ch["dates"] = []
+            ch.setdefault("dates", [])
+            if not ch["series"][0].get("values"):
+                ch["series"][0]["values"] = []
+            vals = ch["series"][0]["values"]
+
+            def _kk(x):
+                _m = re.match(r"(\d+)/(\d+)", str(x) or "")
+                return (int(_m.group(1)), int(_m.group(2))) if _m else (0, 0)
+
+            # 用源站数据日期（非抓取日）写点，避免把昨日数据标成今日造成假涨跌
+            point = _kdate or ("%d/%d" % (today.month, today.day))
+            if ch["dates"] and _kk(ch["dates"][-1]) >= _kk(point):
+                prev_val = vals[-2] if len(vals) >= 2 else None
+                base = ch["dates"][:-1]
+                if base and _kk(base[-1]) == _kk(point):
+                    base = base[:-1]            # 去重：同数据日重跑
+                    prev_val = vals[-3] if len(vals) >= 3 else None
+            else:
+                prev_val = vals[-1] if vals else None
+                base = ch["dates"][-9:]
+            ch["dates"] = base[-9:] + [point]
+            _kv = ch["series"][0]["values"]
+            if len(_kv) > len(base):
+                _kv = _kv[:len(base)]
+            ch["series"][0]["values"] = _kv + [_kavg]
+            # 涨跌：当日均价 vs 上一数据日均价（源站常不标涨跌，故不用多数决），阈值同 trend_cell
+            ck["dir"] = (trend_cell(_kavg, prev_val)["dir"] if prev_val is not None else "flat")
+            ck["price"] = fmt(_kavg)
+            ck["wt_title"] = "近10日数据点（各省公鸡棚前均价）"
+            ck["note"] = ("各省公鸡棚前价 %d 产区均价 %s 元/斤（区间 %s-%s，%s数据）· "
+                          "数据源：鸡病专业网各产区日报 · 云端每日更新"
+                          "（黑凤公鸡等源站未日更项不参与均价，见下方表格）"
+                          % (len(_krows), fmt(_kavg), fmt(min(x[2] for x in _krows)),
+                             fmt(max(x[2] for x in _krows)), point))
+            print("公鸡速览卡: %s 元/斤 dir=%s（%s数据，%d产区），历史 %d 天"
+                  % (ck["price"], ck["dir"], point, len(_krows), len(ch["dates"])))
+        else:
+            print("公鸡速览卡: 本期无当日公鸡报价（源站未更新），保持原值")
+    except Exception as e:
+        print("[warn] 公鸡速览卡更新失败:", e)
 
     # ===== 板块三：817肉杂（快大类活数据）=====
     rows817, d817 = [], ""
