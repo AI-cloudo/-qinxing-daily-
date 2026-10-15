@@ -1677,13 +1677,18 @@ def main():
             if base and _bk(base[-1]) == _bk(point):
                 base = base[:-1]       # 去重：避免出现两个相同数据日
                 prev_val = vals[-3] if len(vals) >= 3 else None
+            _tail = False          # 覆盖末点：dates/values 都保留头部 N 个
         else:
             prev_val = vals[-1] if vals else None
             base = ch["dates"][-9:]
+            _tail = True           # 追加新点：dates/values 都保留尾部 N 个
         ch["dates"] = base[-9:] + [point]
+        # 2026-10-15 修复：追加新点时 dates 取的是尾部窗口 dates[-9:]，而 values 原先用
+        # _bv[:N] 取头部 → 序列一旦满 10 点，之后每追加一天，日期与数值就整体错位一格，
+        # 前端「昨日/3天/7天」标签据此算出假涨跌（曾误报三黄鸡单日跌 1 元）。
         _bv = ch["series"][0]["values"]
         if len(_bv) > len(base):
-            _bv = _bv[:len(base)]
+            _bv = _bv[-len(base):] if _tail else _bv[:len(base)]
         ch["series"][0]["values"] = _bv + [round(avg, 2)]
         # 涨跌方向：当日均价 vs 上一数据日值，阈值与 trend_cell 一致
         _bdir = trend_cell(round(avg, 2), prev_val) if prev_val is not None else {"dir": "flat"}
@@ -1849,13 +1854,16 @@ def main():
                 if base and _kk(base[-1]) == _kk(point):
                     base = base[:-1]            # 去重：同数据日重跑
                     prev_val = vals[-3] if len(vals) >= 3 else None
+                _tail = False          # 覆盖末点：dates/values 均保头部
             else:
                 prev_val = vals[-1] if vals else None
                 base = ch["dates"][-9:]
+                _tail = True           # 追加新点：dates/values 均保尾部
             ch["dates"] = base[-9:] + [point]
+            # 2026-10-15 修复：同白羽卡（dates 保尾、values 原先保头 → 满 10 点后逐日错位）
             _kv = ch["series"][0]["values"]
             if len(_kv) > len(base):
-                _kv = _kv[:len(base)]
+                _kv = _kv[-len(base):] if _tail else _kv[:len(base)]
             ch["series"][0]["values"] = _kv + [_kavg]
             # 涨跌：当日均价 vs 上一数据日均价（源站常不标涨跌，故不用多数决），阈值同 trend_cell
             ck["dir"] = (trend_cell(_kavg, prev_val)["dir"] if prev_val is not None else "flat")
@@ -1920,6 +1928,24 @@ def main():
             print("农财宝典: 已定位最新一期 %s，但正文暂未抓到，沿用上次报价" % ncb_date)
         if rows:
             prev_sh = state.get("sanhuang", {})
+            # ===== 上一期主表明细 → 用于「可比样本」环比 =====
+            # 背景（2026-10-15 发现）：农财宝典每日选登的省份并不固定，直接用「当日全样本均价」
+            # 跨期比较会产生假跳变。实例：10/12 样本 6 条（广东/湖南/湖北/河北/福建）均价 5.48，
+            # 10/13 样本 7 条（湖南/湖北/浙江/江西/安徽/江苏/福建）均价 5.01，看似暴跌 0.47 元；
+            # 但两期都可比者仅湘鄂闽 3 省，真实变动只 −0.08 元，跌幅几乎全来自高价广东(5.95)掉出
+            # 与低价江西(4.00)新入。故涨跌方向一律按可比样本判定，全样本均价仅用于展示水平。
+            _prev_mid = {}
+            for _t in (d["sections"][2].get("tables") or []):
+                if ((_t.get("headers") or [""])[0] != "省份/地区"):
+                    continue
+                for _r in _t.get("rows") or []:
+                    try:
+                        _p = _r[2].get("t") if isinstance(_r[2], dict) else _r[2]
+                        _nn = [float(x) for x in re.split(r"[-—–~]", str(_p)) if x]
+                        if _nn:
+                            _prev_mid[(str(_r[0]).strip(), str(_r[1]).strip())] = round(sum(_nn) / len(_nn), 3)
+                    except Exception:
+                        pass
             tbl = []
             for r in rows:
                 lo = float(re.split(r"-", r["price"])[0])
@@ -1948,10 +1974,23 @@ def main():
 
             # 同步维护三黄鸡速览卡（口径：主表快大类均价），并累积历史供趋势使用
             mids = []
+            _cur_mid = {}
             for r in rows:
                 parts = [float(x) for x in re.split(r"-", r["price"]) if x]
-                mids.append(sum(parts) / len(parts))
+                mid = sum(parts) / len(parts)
+                mids.append(mid)
+                _cur_mid[(str(r["prov"]).strip(), str(r["breed"]).strip())] = round(mid, 3)
             sh_avg = round(sum(mids) / len(mids), 2)
+            # 可比样本：本期与上一期都报价的（省份, 品种）
+            _common = [k for k in _cur_mid if k in _prev_mid]
+            _cmp_diff = None
+            if len(_common) >= 2:
+                _c_avg = sum(_cur_mid[k] for k in _common) / len(_common)
+                _p_avg = sum(_prev_mid[k] for k in _common) / len(_common)
+                _cmp_diff = round(_c_avg - _p_avg, 3)
+                _c_avg, _p_avg = round(_c_avg, 2), round(_p_avg, 2)
+            else:
+                _c_avg = _p_avg = None
             cards = d.setdefault("trend_cards", [])
             sh = None
             for c in cards:
@@ -1979,30 +2018,55 @@ def main():
                 base = ch["dates"][:-1]
                 if base and _sk(base[-1]) == _sk(point):
                     base = base[:-1]   # 去重：避免出现两个相同数据日
+                _tail = False          # 覆盖末点：dates/values 均保头部
             else:
                 base = ch["dates"][-9:]
+                _tail = True           # 追加新点：dates/values 均保尾部
             ch["dates"] = base[-9:] + [point]
+            # 2026-10-15 修复：dates 保尾而 values 原先保头 → 序列满 10 点后逐日整体错位。
+            # 本次线上「三黄鸡昨日 ↓1.05 元」即由此产生：显示 10/12=6.06 实为 10/8 的值，
+            # 真实 10/12=5.47，跌幅 0.46 元。
             _sv = ch["series"][0]["values"]
             if len(_sv) > len(base):
-                _sv = _sv[:len(base)]
+                _sv = _sv[-len(base):] if _tail else _sv[:len(base)]
             ch["series"][0]["values"] = _sv + [sh_avg]
-            # 涨跌方向：主表快大类各省环比多数决（与板块表格同口径；持平占多数判稳）
-            _sc = {"up": 0, "down": 0, "flat": 0}
-            for _r in tbl:
-                _cd = _r[3] if isinstance(_r[3], dict) else {}
-                _sc[_cd.get("dir", "flat")] = _sc.get(_cd.get("dir", "flat"), 0) + 1
-            if _sc["flat"] > _sc["up"] and _sc["flat"] > _sc["down"]:
+            # 涨跌方向：优先用「可比样本」环比（同省份/品种前后期对比），避免样本进出造成假跳变；
+            # 可比样本不足时才回退到主表各省环比多数决。
+            if _cmp_diff is not None and abs(_cmp_diff) < 0.005:
                 sh["dir"] = "flat"
-            elif _sc["up"] > _sc["down"]:
-                sh["dir"] = "up"
-            elif _sc["down"] > _sc["up"]:
-                sh["dir"] = "down"
+            elif _cmp_diff is not None:
+                sh["dir"] = "up" if _cmp_diff > 0 else "down"
             else:
-                sh["dir"] = "flat"
+                _sc = {"up": 0, "down": 0, "flat": 0}
+                for _r in tbl:
+                    _cd = _r[3] if isinstance(_r[3], dict) else {}
+                    _sc[_cd.get("dir", "flat")] = _sc.get(_cd.get("dir", "flat"), 0) + 1
+                if _sc["flat"] > _sc["up"] and _sc["flat"] > _sc["down"]:
+                    sh["dir"] = "flat"
+                elif _sc["up"] > _sc["down"]:
+                    sh["dir"] = "up"
+                elif _sc["down"] > _sc["up"]:
+                    sh["dir"] = "down"
+                else:
+                    sh["dir"] = "flat"
             sh["price"] = fmt(sh_avg)
             sh["note"] = ("冻品流通口径·快大类活禽出栏：%d省均价 %s 元/斤（区间 %s-%s）；"
                           "数据源：农财宝典全国鸡价 %s（活禽鲜销参考源已停更，按规则清退）"
                           % (len(rows), fmt(sh_avg), fmt(min(mids)), fmt(max(mids)), ncb_date))
+            # 样本集变动提示：源站每日选登省份不固定，跨期均价不完全可比，须显式告知
+            _dropped = [k for k in _prev_mid if k not in _cur_mid]
+            _added = [k for k in _cur_mid if k not in _prev_mid]
+            if (_dropped or _added) and _cmp_diff is not None:
+                sh["note"] += ("　|　【口径提示】样本较上期变动：%s；跨期全样本均价不完全可比，"
+                               "涨跌按同比 %d 省可比样本判定，实为%s %s 元/斤（%s→%s）。"
+                               % ("出%s/入%s" % (
+                                      "·".join(dict.fromkeys(a for a, b in _dropped)) or "无",
+                                      "·".join(dict.fromkeys(a for a, b in _added)) or "无")
+                                  if (_dropped or _added) else "无",
+                                  len(_common), "涨" if _cmp_diff > 0 else ("跌" if _cmp_diff < 0 else "持平"),
+                                  fmt(abs(_cmp_diff)), _p_avg, _c_avg))
+            elif _cmp_diff is None:
+                sh["note"] += ("　|　【口径提示】本期与上期可比省份不足 2 个，跨期均价不可比，请勿据此判趋势。")
             print("三黄鸡速览卡: %s 元/斤 dir=%s（%s数据），历史 %d 天"
                   % (sh["price"], sh["dir"], point, len(ch["dates"])))
 
@@ -2206,13 +2270,16 @@ def main():
                 base = dates[:-1]      # 覆盖末点（同数据日重跑 / 纠正上一轮误标的抓取日）
                 if base and _dkey(base[-1]) == _dkey(point):
                     base = base[:-1]   # 去重：避免出现两个相同数据日
+                _tail = False          # 覆盖末点：dates/values 均保头部
             else:
                 base = dates[-9:]
+                _tail = True           # 追加新点：dates/values 均保尾部
             chart["dates"] = base[-9:] + [point]
             for s in chart["series"]:
                 vals = (s.get("values") or [])
                 if len(vals) > len(base):
-                    vals = vals[:len(base)]
+                    # 2026-10-15 修复：同白羽卡（dates 保尾、values 原先保头 → 满 10 点后逐日错位）
+                    vals = vals[-len(base):] if _tail else vals[:len(base)]
                 s["values"] = vals + [nat]
             # 涨跌方向 = 各省环比多数决，与板块表格 trend_cell 完全同口径
             # 规则：持平占多数 → 稳；否则按涨/跌家数比较（避免"8平1涨"被误判为涨价）
