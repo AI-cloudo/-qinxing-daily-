@@ -1313,6 +1313,9 @@ def main():
                 print("[warn] 鸡网ckexc 解析失败:", e)
     print("鸡网ckexc 淘汰鸡参考(%s): %s" % (ck_date, {k: len(v) for k, v in ck_rows.items()}))
     _red = ck_rows.get("红鸡", [])
+    # 鸡网 ckexc 是「本地可抓、GitHub Actions 机房 IP 被拒」的源（云端每次必败），
+    # 抓不到时必须沿用上一期，否则板块一主表整体重建会连带把这张表删掉。
+    _ck_carried = _carry_prev(0, lambda t: (t.get("headers") or [""])[0] == "地市")
     if _red:
         # 优先山东全部地市；山东缺数据时退回周边主产省代表市（控制行数、便于手机浏览）
         sd = [r for r in _red if r[0] == "山东"]
@@ -1330,7 +1333,7 @@ def main():
             _area_note = "山东全部地市"
         if sd:
             sec = d["sections"][0]
-            keep = [t for t in sec.get("tables", []) if "ckexc" not in (t.get("cap") or "")]
+            keep = [t for t in sec.get("tables", []) if "鸡网红鸡" not in (t.get("cap") or "")]
             sec["tables"] = keep + [{
                 "cap": "鸡网红鸡淘汰鸡参照 · %s（%s数据）· 活禽/屠宰双口径，与鸡病专业网交叉比对"
                        % (_area_note, ck_date),
@@ -1350,6 +1353,12 @@ def main():
                             % (mid, cull_avg["山东"], diff))
             except Exception as e:
                 print("[warn] 鸡网ckexc 跨源比对失败:", e)
+    elif _ck_carried:
+        # 云端抓不到 ckexc：把上一期红鸡参照表原样接回，由新鲜度分级决定何时清退
+        sec = d["sections"][0]
+        sec["tables"] = [t for t in sec.get("tables", [])
+                         if (t.get("headers") or [""])[0] != "地市"] + [_ck_carried]
+        print("鸡网ckexc 抓取失败 → 沿用上一期红鸡参照表（云端机房 IP 被源站拒，本地可抓）")
 
     # ===== 板块一补充：博亚和讯「淘鸡分省出场价」（日更·19省·含涨跌，与主表交叉核验）=====
     # 主表（鸡病专业网汇总，11省）保持不动，本表是粒度更细、覆盖更广的分省出场价（自带涨跌列）。
