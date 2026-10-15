@@ -12,6 +12,7 @@ import re
 import json
 import os
 import sys
+import time
 import datetime
 import urllib.request
 
@@ -679,15 +680,29 @@ BOYAR_TJ_SEARCH = "https://www.boyar.cn/search/%E6%B7%98%E9%B8%A1.html"
 BOYAR_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                               "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"}
 
+# 2026-10-15 新增：云端对本站 article 页**偶发 read timeout**（实测 10/14、10/15 连续两天
+# 淘鸡文章抓取失败 → 触发「沿用上一期」→ 页面把下跌伪装成持平）。裸 fetch 一次失败就丢
+# 当期数据，代价太大。这里重试 3 次 + 放宽超时 + 间隔退避；仍失败返回 None 交给沿用逻辑。
+BOYAR_RETRY = 3
+
+
+def boyar_fetch(url, times=BOYAR_RETRY, timeout=30):
+    """博亚和讯专用抓取（重试 + 长超时）。失败返回 None，绝不抛异常。"""
+    for i in range(times):
+        try:
+            return fetch(url, timeout=timeout, headers=BOYAR_HEADERS)
+        except Exception as e:
+            print("[warn] 博亚和讯抓取失败(%d/%d) %s: %s" % (i + 1, times, url, e))
+            if i < times - 1:
+                time.sleep(2 + 2 * i)
+    return None
+
 
 def boyar_latest():
     """博亚和讯搜索页 → 最新一期《YYYY年M月D日全国部分地区淘鸡出场价格》的 (url, "M/D")"""
-    try:
-        h = fetch(BOYAR_TJ_SEARCH, timeout=25, headers=BOYAR_HEADERS)
-    except Exception as e:
-        print("[warn] 博亚和讯搜索页抓取失败:", e)
-        return None, ""
+    h = boyar_fetch(BOYAR_TJ_SEARCH, timeout=25)
     if not h:
+        print("[warn] 博亚和讯搜索页抓取失败（重试 %d 次）" % BOYAR_RETRY)
         return None, ""
     cands = []
     for m in re.finditer(r'href="(/article/(\d+)\.html)"[^>]*>(.{0,300}?)</a>', h, re.S):
@@ -750,12 +765,9 @@ BOYAR_EGG_SEARCH = "https://www.boyar.cn/search/%E9%B8%A1%E8%9B%8B.html"   # 鸡
 
 def boyar_egg_latest():
     """博亚和讯搜索页 → 最新一期《YYYY年M月D日全国部分地区鸡蛋出场价格》的 (url, "M/D")"""
-    try:
-        h = fetch(BOYAR_EGG_SEARCH, timeout=25, headers=BOYAR_HEADERS)
-    except Exception as e:
-        print("[warn] 博亚和讯鸡蛋搜索页抓取失败:", e)
-        return None, ""
+    h = boyar_fetch(BOYAR_EGG_SEARCH, timeout=25)
     if not h:
+        print("[warn] 博亚和讯鸡蛋搜索页抓取失败（重试 %d 次）" % BOYAR_RETRY)
         return None, ""
     cands = []
     for m in re.finditer(r'href="(/article/(\d+)\.html)"[^>]*>(.{0,300}?)</a>', h, re.S):
@@ -1248,11 +1260,10 @@ def main():
     eg_url, eg_date = boyar_egg_latest()
     eg_rows_raw = []
     if eg_url:
-        try:
-            _eh = fetch(eg_url, headers=BOYAR_HEADERS)
-            eg_rows_raw = parse_boyar_egg(_eh) if _eh else []
-        except Exception as e:
-            print("[warn] 博亚和讯鸡蛋出场价抓取失败:", e)
+        _eh = boyar_fetch(eg_url)
+        eg_rows_raw = parse_boyar_egg(_eh) if _eh else []
+        if not eg_rows_raw:
+            print("[warn] 博亚和讯鸡蛋出场价：%d 次重试后仍未取到 %s" % (BOYAR_RETRY, eg_url))
     print("博亚和讯鸡蛋(%s): %d 行" % (eg_date, len(eg_rows_raw)))
     if eg_rows_raw:
         xq_rows = []
@@ -1365,12 +1376,12 @@ def main():
     # 抓取/解析失败自动跳过，不影响任何现有板块。
     bj_url, bj_date = boyar_latest()
     bj_rows_raw = []
+    bj_avg = {}          # 预置：供下方「老母鸡速览卡」优先取用（抓失败时回退鸡病专业网）
     if bj_url:
-        try:
-            _bh = fetch(bj_url, headers=BOYAR_HEADERS)
-            bj_rows_raw = parse_boyar_tj(_bh) if _bh else []
-        except Exception as e:
-            print("[warn] 博亚和讯淘鸡抓取失败:", e)
+        _bh = boyar_fetch(bj_url)
+        bj_rows_raw = parse_boyar_tj(_bh) if _bh else []
+        if not bj_rows_raw:
+            print("[warn] 博亚和讯淘鸡出场价：%d 次重试后仍未取到 %s" % (BOYAR_RETRY, bj_url))
     bj_provs = sorted({r["prov"] for r in bj_rows_raw})
     print("博亚和讯淘鸡(%s): %d 行 / %d 省" % (bj_date, len(bj_rows_raw), len(bj_provs)))
     if len(bj_provs) >= 5:
@@ -1397,13 +1408,29 @@ def main():
             "rows": bj_out,
         }]
         sec["tag"] = "%s　|　博亚和讯 %s" % (sec.get("tag", ""), bj_date)
-        # 跨源比对：博亚山东出场价 vs 鸡病专业网山东均价，差 ≥0.3 提示核价
+        # 主表（鸡病专业网汇总）的淘汰鸡段更新偏慢（实测多期数值不变、只有蛋价在动），
+        # 补 cap 明确来源与滞后，避免被当成当日行情 → 以本表（博亚分省出场价）为准。
+        for _t in sec.get("tables", []):
+            if (_t.get("headers") or [""])[0] == "省份" and "博亚和讯" not in (_t.get("cap") or ""):
+                _t["cap"] = ("来源：鸡病专业网《鸡蛋、淘汰鸡价格汇总》· 数据日期 %s。"
+                             "⚠ 该栏淘汰鸡段更新偏慢（多期同值、只有蛋价在日更），"
+                             "当日真实行情请以下方「博亚和讯分省出场价」表为准。" % (sum_date or "?"))
+        # 板块分析里补一条「当日真实行情」（analysis 在博亚抓取前已生成，此处追加）
+        if cull_avg and "up" in sec.get("analysis", {}):
+            _bn = round(sum(bj_avg.values()) / len(bj_avg), 2)
+            _cn = round(sum(cull_avg.values()) / len(cull_avg), 2)
+            sec["analysis"]["up"].append(
+                "【当日真实行情·博亚和讯 %s】%d省均价 %s 元/斤；上表鸡病专业网汇总报 %s 元/斤（%d省），"
+                "两者相差 %s 元/斤——该栏淘汰鸡段多期不更新，接货价请以本行为准"
+                % (bj_date, len(bj_avg), fmt(_bn), fmt(_cn), len(cull_avg), fmt(abs(_bn - _cn))))
+        # 跨源比对：博亚山东出场价 vs 鸡病专业网山东均价（阈值 0.12：淘汰鸡日均波动本就 0.1~0.2，
+        # 原阈值 0.3 太高、实测从未触发，等于没有这道闸）
         try:
             if bj_avg.get("山东") and cull_avg.get("山东") and "up" in sec.get("analysis", {}):
                 _bd = bj_avg["山东"] - cull_avg["山东"]
-                if abs(_bd) >= 0.3:
+                if abs(_bd) >= 0.12:
                     sec["analysis"]["up"].append(
-                        "⚠ 跨源分歧：博亚和讯 山东出场价 %.2f 与鸡病专业网山东均价 %.2f 相差 %.2f 元/斤，下单前建议电话核价"
+                        "⚠ 山东核价：博亚和讯出场价 %.2f vs 鸡病专业网均价 %.2f，相差 %.2f 元/斤，下单前请电话核实"
                         % (bj_avg["山东"], cull_avg["山东"], _bd))
         except Exception as e:
             print("[warn] 博亚和讯跨源比对失败:", e)
@@ -2270,21 +2297,62 @@ def main():
         _wt = "无AI周度研判"
     d["sections"][5]["tag"] = "%s · 规则提示自动生成 %s" % (_wt, date_short)
 
-    # ===== 走势卡：老母鸡（按「数据日期」写点，涨跌口径与板块表格一致） =====
+    # ===== 走势卡：老母鸡（口径：博亚和讯分省出场价优先 → 回退鸡病专业网汇总） =====
+    # 2026-10-15 修复（用户据微信淘淘鸡质疑"老母鸡连续三天下滑"后发现）：
+    # 原实现固定用鸡病专业网汇总（11省）算均价，但该源**淘汰鸡栏并不日更**——
+    # 实测 10/14、10/15 两篇原文逐省淘汰鸡价完全相同（辽宁都写 5.25），只有蛋价在动。
+    # 而博亚和讯分省出场价每天在走（10/14 辽宁 5.40→5.20、山东 5.30→5.10、河南 -0.30）。
+    # 用滞后源算均价会把真实下跌抹平成"持平"（页面 5.21 vs 实际 5.03，差 0.18 元），
+    # 直接误导采购决策。现改为优先博亚（19省、自带涨跌列），抓不到才回退鸡病。
     try:
-        if cull_avg:
-            nat = round(sum(cull_avg.values()) / len(cull_avg), 2)
+        # 取数优先级：①本期新抓到的博亚分省价 → ②页面上沿用的博亚表（上一期，仍比鸡病新）
+        # → ③鸡病专业网汇总（该栏淘汰鸡段更新偏慢，仅兜底）
+        _bj_tbl = None
+        for _t in (d["sections"][0].get("tables") or []):
+            if "博亚和讯" in (_t.get("cap") or ""):
+                _bj_tbl = _t
+                break
+        _bj_live = bool(bj_avg)
+        _bj_carried = (not _bj_live) and bool(_bj_tbl)
+        _avg_map = {}
+        if _bj_live:
+            _avg_map = dict(bj_avg)
+            _src_name, _src_date = "博亚和讯分省出场价", (bj_date or date_short)
+        elif _bj_carried:
+            for _r in (_bj_tbl.get("rows") or []):
+                try:
+                    _avg_map[str(_r[0])] = float(str(_r[1]).strip("↑↓→ "))
+                except Exception:
+                    continue
+            _md = re.search(r"(\d{1,2}/\d{1,2})", _bj_tbl.get("cap") or "")
+            _src_name = "博亚和讯分省出场价（沿用上一期）"
+            _src_date = _md.group(1) if _md else date_short
+        else:
+            _avg_map = dict(cull_avg)
+            _src_name, _src_date = "鸡病专业网汇总（该栏更新偏慢）", (sum_date or date_short)
+        if _avg_map:
+            nat = round(sum(_avg_map.values()) / len(_avg_map), 2)
             tc = d["trend_cards"][0]
             chart = tc["chart"]
             dates = chart.get("dates") or []
+            # 口径切换护栏：序列名不符说明是旧口径（鸡病11省）的历史点，混画会出假拐点 → 重置重来
+            _SERIES_NAME = "淘汰鸡分省出场价均价"
+            if chart.get("name") != _SERIES_NAME:
+                print("老母鸡速览卡: 口径切换（%s → %s），走势序列重置"
+                      % (chart.get("name"), _SERIES_NAME))
+                chart["name"] = _SERIES_NAME
+                chart["dates"] = []
+                for s in chart["series"]:
+                    s["values"] = []
+                dates = []
 
             def _dkey(x):
                 _m = re.match(r"(\d+)/(\d+)", str(x) or "")
                 return (int(_m.group(1)), int(_m.group(2))) if _m else (0, 0)
 
-            # 用源站文章的数据日期（sum_date）而非抓取当天：避免把昨日数据标成今日，
+            # 用源站文章的数据日期而非抓取当天：避免把昨日数据标成今日，
             # 前端拿错位点相减得出"假涨跌"（曾出现全板块持平却显示涨价）。
-            point = sum_date or date_short
+            point = _src_date
             if dates and _dkey(dates[-1]) >= _dkey(point):
                 base = dates[:-1]      # 覆盖末点（同数据日重跑 / 纠正上一轮误标的抓取日）
                 if base and _dkey(base[-1]) == _dkey(point):
@@ -2300,12 +2368,19 @@ def main():
                     # 2026-10-15 修复：同白羽卡（dates 保尾、values 原先保头 → 满 10 点后逐日错位）
                     vals = vals[-len(base):] if _tail else vals[:len(base)]
                 s["values"] = vals + [nat]
-            # 涨跌方向 = 各省环比多数决，与板块表格 trend_cell 完全同口径
-            # 规则：持平占多数 → 稳；否则按涨/跌家数比较（避免"8平1涨"被误判为涨价）
-            _pv = state.get("cull", {})
+            # 涨跌方向：博亚当期口径读表内自带涨跌列（多数决）；沿用口径方向未知 → 判稳，
+            # 绝不把上一期的涨跌冒充当日；鸡病兜底口径无涨跌列，用跨期比价
             _dd = {"up": 0, "down": 0, "flat": 0}
-            for _p, _v in cull_avg.items():
-                _dd[trend_cell(_v, _pv.get(_p))["dir"]] += 1
+            if _bj_live and _bj_tbl:
+                for _r in (_bj_tbl.get("rows") or []):
+                    _c = _r[2] if isinstance(_r[2], dict) else {}
+                    _dd[_c.get("dir", "flat")] = _dd.get(_c.get("dir", "flat"), 0) + 1
+            elif _bj_carried:
+                _dd["flat"] = len(_avg_map)
+            else:
+                _pv = state.get("cull", {})
+                for _p, _v in cull_avg.items():
+                    _dd[trend_cell(_v, _pv.get(_p))["dir"]] += 1
             if _dd["flat"] > _dd["up"] and _dd["flat"] > _dd["down"]:
                 tc["dir"] = "flat"
             elif _dd["up"] > _dd["down"]:
@@ -2315,9 +2390,22 @@ def main():
             else:
                 tc["dir"] = "flat"
             tc["price"] = fmt(nat)     # 大数字与 note/走势末值同值（原来 price 长期不更新）
-            tc["note"] = ("全国淘汰鸡均价 %s 元/斤（%s，%d省）。云端自动更新，数据源：鸡病专业网。"
-                          % (fmt(nat), sum_date, len(cull_avg)))
-            print("老母鸡速览卡: %s 元/斤 dir=%s（%s数据，%d省）" % (fmt(nat), tc["dir"], point, len(cull_avg)))
+            _note = ("全国淘汰鸡均价 %s 元/斤（%s，%d省）。云端自动更新，数据源：%s。"
+                     % (fmt(nat), _src_date, len(_avg_map), _src_name))
+            # 跨源提示：鸡病专业网同口径若仍停在旧价，明确写出滞后，避免被当成当日价
+            if (_bj_live or _bj_carried) and cull_avg:
+                _cnat = round(sum(cull_avg.values()) / len(cull_avg), 2)
+                if abs(_cnat - nat) >= 0.08:
+                    _note += ("鸡病专业网汇总同口径仍报 %s 元/斤（%s，%d省；该栏淘汰鸡段更新偏慢），"
+                              "两者相差 %s 元/斤，下单前请电话核实。"
+                              % (fmt(_cnat), sum_date or "?", len(cull_avg), fmt(abs(_cnat - nat))))
+            if _bj_carried:
+                _note += "本期博亚和讯未抓到当期更新，本节沿用上一期分省表，涨跌方向未更新。"
+            elif not _bj_live:
+                _note += "本期博亚和讯未抓到，暂用鸡病专业网汇总兜底（该栏更新偏慢，务必核实）。"
+            tc["note"] = _note
+            print("老母鸡速览卡: %s 元/斤 dir=%s（%s数据，%d省，源=%s）"
+                  % (fmt(nat), tc["dir"], point, len(_avg_map), _src_name))
     except Exception as e:
         print("[warn] 走势卡更新失败:", e)
 
