@@ -1640,6 +1640,19 @@ def main():
 
     keep = [t for t in sec.get("tables", [])
             if (t.get("headers") or [""])[0] != "分割品" and not _is_mf(t)]
+
+    # 无条件去重：同源的《山东冻品成交价》日更表只保留最后一张。
+    # 背景（2026-10-15 线上实测）：Mysteel 抓失败的轮次里，下方 _carried 的旧判据
+    # 「"Mysteel" in cap」会连《山东成交价》表一起接回（该表 cap 里带"见下方 Mysteel 日更表"
+    # 字样被误命中），于是与 A 块沿用的那张并存 → 页面上同一张表出现两遍。
+    # 这里在插入 Mysteel 表之前先归并，无论 A/B 哪块成功失败都不会累积。
+    _fz_key = "山东成交区间"
+    _fz_idx = [i for i, t in enumerate(keep)
+               if _fz_key in " ".join(str(x) for x in (t.get("headers") or []))]
+    if len(_fz_idx) > 1:
+        for _i in reversed(_fz_idx[:-1]):
+            keep.pop(_i)
+        print("冻品速览: 清理重复的山东成交价表 %d 张（同源只保留最新一张）" % (len(_fz_idx) - 1))
     if mf and mf["rows"]:
         base = next((i for i, t in enumerate(keep)
                      if (t.get("headers") or [""])[0] == "品类"), -1) + 1
@@ -1663,7 +1676,10 @@ def main():
     else:
         # 抓不到时**不删表**（云端网络抖动会整页超时，2026-10-14 实测）：
         # 上一期若已是 Mysteel 日更表则原样沿用；只有页面上还挂着旧周更表才除名。
-        _carried = [t for t in _prev_tables.get(4, []) if "Mysteel" in (t.get("cap") or "")]
+        # 判据必须是 headers（本块自产表才有「山东/辽宁中间价（元/公斤）」列），
+        # **不能用 cap 含 "Mysteel"**——《山东成交价》表 cap 里写有"见下方 Mysteel 日更表"，
+        # 会被误命中并重复接回（2026-10-15 线上重复表事故的根因）。
+        _carried = [t for t in _prev_tables.get(4, []) if _is_mf(t)]
         if _carried:
             for _t in _carried:
                 _t = dict(_t)
