@@ -1575,8 +1575,10 @@ def main():
                                "%s-%s" % (fmt(r["lo"]), fmt(r["hi"])),
                                fmt(r["mid"]), trend_cell(r["mid"], pv)])
             sec = d["sections"][4]
+            # 只移除本块自己那张《山东成交区间》表，不要连带删掉 Mysteel 的日更表
+            # （删了的话只能靠下一段补回，一旦那段抓失败就整块消失）
             keep = [t for t in sec.get("tables", [])
-                    if (t.get("headers") or [""])[0] != "品类"]
+                    if "山东成交区间" not in " ".join(str(x) for x in (t.get("headers") or []))]
             # 插到「周更分割品表」前面，日更与周更紧邻便于对照
             pos = next((i for i, t in enumerate(keep)
                         if (t.get("headers") or [""])[0] == "分割品"), len(keep))
@@ -1600,9 +1602,17 @@ def main():
     mf = mysteel_frozen_daily()
     mf_date = mf["date"] if mf else ""
     # 无论是否抓到，都先清掉遗留的周更表（不能把 9/21 旧值留在页面上）
+    # 同时必须移除上一轮插入的 Mysteel 日更表本身：否则本块的 insert 会每次叠加两张，
+    # 重跑 N 次就变成 2N 张「品类」表（2026-10-15 线上已累积到 5 张）。
     sec = d["sections"][4]
+
+    def _is_mf(t):
+        """是否为本块自己生成的 Mysteel 山东/辽宁中间价日更表"""
+        h = " ".join(str(x) for x in (t.get("headers") or []))
+        return ("山东中间价（元/公斤）" in h) or ("辽宁中间价（元/公斤）" in h)
+
     keep = [t for t in sec.get("tables", [])
-            if (t.get("headers") or [""])[0] != "分割品"]
+            if (t.get("headers") or [""])[0] != "分割品" and not _is_mf(t)]
     if mf and mf["rows"]:
         base = next((i for i, t in enumerate(keep)
                      if (t.get("headers") or [""])[0] == "品类"), -1) + 1
