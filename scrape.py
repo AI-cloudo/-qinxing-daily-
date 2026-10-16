@@ -160,16 +160,23 @@ def parse_region_prices(html):
 
 
 def parse_817(html):
-    """817肉杂棚前 → [{region, spec, price, cell}]"""
+    """817肉杂棚前 → [{region, spec, price, cell, bday}]
+
+    bday = 正文「与N日相比」的 N。该栏（鸡病专业网《部分地区肉杂817棚前价格行情》）
+    是**滚动更新页**：报价日 = bday + 1，标题日期在次日尚未改标题时会滞后一天
+    （实测 2026-10-16：页面标题仍写「10月15日」，正文写「与15日相比上涨0.10元/斤」，
+    而 10/15 的濮阳报价恰为 3.25-3.35、10/16 为 3.35-3.45，+0.10 严丝合缝）。
+    故数据日期一律按 bday+1 校正，不能直接用标题日期。
+    """
     rows = []
     for line in text_lines(html):
         m = re.search(
-            r"(\S{2,8}?)([0-9.]+(?:-[0-9.]+)?斤[^，。]*?)棚前(?:收购价|价)([0-9]+(?:\.[0-9]+)?-[0-9.]+|[0-9.]+)元/斤，与\d+日相比(下滑|上涨|持平)(?:([0-9.]+)元/斤)?",
+            r"(\S{2,8}?)([0-9.]+(?:-[0-9.]+)?斤[^，。]*?)棚前(?:收购价|价)([0-9]+(?:\.[0-9]+)?-[0-9.]+|[0-9.]+)元/斤，与(\d+)日相比(下滑|上涨|持平)(?:([0-9.]+)元/斤)?",
             line,
         )
         if not m:
             continue
-        region, spec, price, direction, num = m.groups()
+        region, spec, price, bday, direction, num = m.groups()
         if "苗" in region + spec:
             continue
         if direction == "持平" or not num:
@@ -177,7 +184,8 @@ def parse_817(html):
         else:
             arrow = "↓" if direction == "下滑" else "↑"
             cell = {"t": arrow + num, "dir": "down" if direction == "下滑" else "up"}
-        rows.append({"region": region, "spec": spec, "price": price, "cell": cell})
+        rows.append({"region": region, "spec": spec, "price": price, "cell": cell,
+                     "bday": int(bday)})
     return rows
 
 
@@ -310,6 +318,16 @@ def backfill_broiler_history(arts, days=7):
 
 
 MYSTEEL_BY = "https://www.mysteel.com/hot/1667520.html"   # 我的钢铁网·鸡业·2026年白羽肉鸡行情
+
+# ===== 三黄鸡速览卡口径（用户 2026-10-16 定：「三黄鸡指的是 817 鸡杂较多」）=====
+# 817肉杂棚前均价 = 顶栏「三黄鸡」卡的口径；chart.name 固定为此名，不符即重置序列。
+CARD817_NAME = "817肉杂棚前均价"
+# 历史补种：口径切换时用历史 commit 复算的真实值补足趋势线
+# （取每个数据日最后一个 commit 的 817 表，按区间中值算 8 点均价；n=8 每日恒定）
+SEED_817 = [("10/1", 3.612), ("10/2", 3.525), ("10/3", 3.487), ("10/4", 3.462),
+            ("10/5", 3.500), ("10/6", 3.450), ("10/7", 3.450), ("10/8", 3.438),
+            ("10/9", 3.413), ("10/10", 3.388), ("10/11", 3.431), ("10/13", 3.406),
+            ("10/14", 3.388), ("10/15", 3.362)]
 
 # ===== 三黄鸡（冻品快大类）数据源：网易·农财宝典畜牧版「全国鸡价」日报 =====
 NCB_ART = "https://www.163.com/dy/article/%s.html"
@@ -1954,17 +1972,124 @@ def main():
         except Exception as e:
             print("[warn] 817文章抓取失败:", e)
     print("817文章(%s)解析行数: %d" % (d817, len(rows817)))
+
+    # 数据日期校正：该栏为滚动更新页，报价日 = 正文对比基准日 + 1（见 parse_817 注释）
+    d817_real = d817
+    if rows817:
+        _b = rows817[0].get("bday")
+        _tmo = re.search(r"(\d+)月(\d+)日", (hit[1] if hit else ""))
+        if _b:
+            _mo = int(_tmo.group(1)) if _tmo else today.month
+            _dd = _b + 1
+            if _dd > 31:
+                _mo, _dd = (_mo % 12) + 1, 1
+            _cand = "%d/%d" % (_mo, _dd)
+            _key = lambda s: (int(str(s).split("/")[0]) * 100 + int(str(s).split("/")[1])) \
+                if re.match(r"^\d+/\d+$", str(s) or "") else (0)
+            if not d817 or _key(_cand) >= _key(d817):
+                d817_real = _cand
+        if d817_real != d817:
+            print("817数据日期校正: 标题 %s → 正文对比基准日+1 = %s" % (d817, d817_real))
+
     if rows817:
         sec = d["sections"][2]
         # 剔除上次的817表（避免重复运行累积），保留其余冻结表
         keep_tables = [t for t in sec.get("tables", [])
                        if "817" not in t["headers"][0]]
-        t817 = {"headers": ["地区（817肉杂·快大类）", "规格", "棚前价（元/斤）", "环比", "数据日期"],
-                "rows": [[r["region"], r["spec"], r["price"], r["cell"], "数据" + d817] for r in rows817]}
+        t817 = {"cap": ("817肉杂棚前价（冻品三黄鸡原料基准·云端每日更新）· 数据源：鸡病专业网"
+                        "《部分地区肉杂817棚前价格行情》%s（该栏为滚动更新页，已按正文对比基准日校正）"
+                        % d817_real),
+                "headers": ["地区（817肉杂·快大类）", "规格", "棚前价（元/斤）", "环比", "数据日期"],
+                "rows": [[r["region"], r["spec"], r["price"], r["cell"], "数据" + d817_real]
+                         for r in rows817]}
         sec["tables"] = [keep_tables[0], t817] + keep_tables[1:] if keep_tables else [t817]
-        sec["tag"] = ("口径：快大类前端活禽=冻品三黄鸡成本基准。817肉杂为当日云端抓取（%s）；"
-                      "快大三黄各省价沿用最近一期农财宝典数据（当日聚合页未更新）；两者均为快大类，可互相印证。"
-                      % d817)
+        sec["tag"] = ("主口径：817肉杂棚前（冻品三黄鸡原料，云端每日更新，数据 %s）；"
+                      "农财宝典快大类为分省参照（含麻鸡类，活禽鲜销口径，不与 817 混算）。"
+                      % d817_real)
+
+        # ===== 三黄鸡速览卡（口径：817肉杂棚前均价 · 用户 2026-10-16 定）=====
+        # 用户原话「三黄鸡指的是 817 鸡杂较多」→ 本卡口径由「农财宝典快大类混合均价」
+        # 切换为「817肉杂棚前均价」。原因：农财宝典快大类 8 省样本里 5 省是麻鸡/青脚麻公
+        # （10/15 均价 5.09 元/斤），而用户实际采购的 817 系冻品原料（2.8-3.6 斤）当日
+        # 均价仅 3.42 元/斤，两者差 1.6 元/斤，绝不可混算。
+        # 817 表样本恒定：每天固定 8 个报价点（山东聊城/德州、河南濮阳/开封/新乡、
+        # 江苏南通、浙江金华、小规格），无样本进出造成的假跳变。
+        _m817, _m817big, _m817small, _v817 = [], [], [], None
+        for _r in rows817:
+            _nn = [float(x) for x in re.split(r"[-—–~]", str(_r["price"]))
+                   if re.match(r"^[0-9.]+$", x)]
+            if not _nn:
+                continue
+            _mid = sum(_nn) / len(_nn)
+            _m817.append(_mid)
+            if "小规格" in str(_r["region"]):
+                _m817small.append(_mid)
+            else:
+                _m817big.append(_mid)
+        if _m817:
+            _v817 = round(sum(_m817) / len(_m817), 3)
+            cards = d.setdefault("trend_cards", [])
+            sh = None
+            for c in cards:
+                if "三黄" in (c.get("name") or "") or "817" in (c.get("name") or ""):
+                    sh = c
+                    break
+            if sh is None:
+                sh = {"name": "三黄鸡", "unit": "元/斤", "chart": {}}
+                cards.append(sh)
+            ch = sh.setdefault("chart", {})
+            # 口径护栏：chart.name 不符即视为口径切换 → 清空序列并补种历史
+            if ch.get("name") != CARD817_NAME:
+                ch["name"] = CARD817_NAME
+                ch["dates"] = [x[0] for x in SEED_817]
+                ch["series"] = [{"name": CARD817_NAME, "values": [x[1] for x in SEED_817]}]
+                sh["dir"] = "flat"
+                print("三黄鸡速览卡: 口径切换为「%s」，序列重置并补种 %d 个历史点"
+                      % (CARD817_NAME, len(SEED_817)))
+            ch.setdefault("dates", [])
+            if not ch.get("series"):
+                ch["series"] = [{"name": CARD817_NAME, "values": []}]
+            ch["series"][0].setdefault("values", [])
+            ch["series"][0]["name"] = CARD817_NAME
+
+            def _sk(x):
+                _m = re.match(r"(\d+)/(\d+)", str(x) or "")
+                return (int(_m.group(1)), int(_m.group(2))) if _m else (0, 0)
+
+            _pt = d817_real or ("%d/%d" % (today.month, today.day))
+            if ch["dates"] and _sk(ch["dates"][-1]) >= _sk(_pt):
+                base = ch["dates"][:-1]
+                if base and _sk(base[-1]) == _sk(_pt):
+                    base = base[:-1]   # 去重：避免出现两个相同数据日
+                _tail = False          # 覆盖末点：dates/values 均保头部
+            else:
+                base = ch["dates"][-9:]
+                _tail = True           # 追加新点：dates/values 均保尾部
+            ch["dates"] = base[-9:] + [_pt]
+            _sv = ch["series"][0]["values"]
+            if len(_sv) > len(base):
+                _sv = _sv[-len(base):] if _tail else _sv[:len(base)]
+            _prev_v = _sv[-1] if _sv else None
+            ch["series"][0]["values"] = _sv + [_v817]
+            if _prev_v is None:
+                sh["dir"] = "flat"
+            else:
+                _dd817 = round(_v817 - _prev_v, 3)
+                sh["dir"] = ("flat" if abs(_dd817) < 0.005
+                             else ("up" if _dd817 > 0 else "down"))
+            sh["price"] = fmt(_v817)
+            sh["note"] = ("冻品流通口径·817肉杂棚前：%d 点均价 %s 元/斤（大规格 %d 点 %s"
+                          "、小规格1.5-1.7斤 %s）；数据源：鸡病专业网《部分地区肉杂817棚前"
+                          "价格行情》%s；本卡口径＝用户实际采购的 817 系冻品原料，农财宝典"
+                          "快大类含麻鸡类、仅作分省参照，不参与本卡。"
+                          % (len(_m817), fmt(_v817), len(_m817big),
+                             fmt(sum(_m817big) / len(_m817big)) if _m817big else "—",
+                             fmt(sum(_m817small) / len(_m817small)) if _m817small else "—",
+                             d817_real))
+            print("三黄鸡速览卡(817口径): %s 元/斤 dir=%s（%s数据），%d 点，历史 %d 天"
+                  % (sh["price"], sh["dir"], _pt, len(_m817), len(ch["dates"])))
+    else:
+        print("817肉杂: 本期未抓到，速览卡沿用上一期（不重置口径）")
 
     # ===== 板块三补充：网易·农财宝典「全国鸡价」日报 → 三黄鸡快大类分省价 =====
     seeds = list(NCB_SEEDS)
@@ -2021,7 +2146,7 @@ def main():
             sec = d["sections"][2]
             keep = [t for t in sec.get("tables", []) if t["headers"][0] != "省份/地区"]
             sec["tables"] = [{
-                "cap": "冻品流通三黄鸡·快大类活禽出栏价（元/斤）· 数据源：网易农财宝典畜牧版「全国鸡价」日报",
+                "cap": "快大类分省价·参照表（含麻鸡/青脚麻公，非纯三黄鸡口径）· 数据源：网易农财宝典畜牧版「全国鸡价」日报 · 三黄鸡速览卡口径已切至 817 肉杂棚前",
                 "headers": ["省份/地区", "冻品流通品种（快大类）", "出栏价（元/斤）", "环比", "数据来源"],
                 "rows": tbl
             }] + keep
@@ -2029,108 +2154,22 @@ def main():
             _ncb_lag = lag_days(ncb_date, today)
             _ncb_note = ("（源站滞后期：已滞后%d天，非当日行情）" % _ncb_lag
                          if _ncb_lag is not None and _ncb_lag >= 2 else "")
-            sec["tag"] = ("快大类分省价 %s 云端抓取（农财宝典）%s；817肉杂同日抓取（%s）。"
+            sec["tag"] = ("主口径：817肉杂棚前（冻品三黄鸡原料，云端每日更新，数据 %s）；"
+                          "农财宝典快大类分省价 %s%s 为参照（含麻鸡类，不参与速览卡）。"
                           "慢速类(项鸡/阉鸡/竹丝鸡)见下方参考表，非冻品主渠道。"
-                          % (ncb_date, _ncb_note, d817))
+                          % (d817_real, ncb_date, _ncb_note))
             print("三黄鸡主表更新: %d 行" % len(tbl))
 
-            # 同步维护三黄鸡速览卡（口径：主表快大类均价），并累积历史供趋势使用
+            # 农财宝典快大类均价：仅用于本板块「分省参照」展示
+            # （速览卡口径已于 2026-10-16 切换为 817 肉杂棚前均价，见上方板块三 817 块）
             mids = []
-            _cur_mid = {}
             for r in rows:
                 parts = [float(x) for x in re.split(r"-", r["price"]) if x]
-                mid = sum(parts) / len(parts)
-                mids.append(mid)
-                _cur_mid[(str(r["prov"]).strip(), str(r["breed"]).strip())] = round(mid, 3)
-            sh_avg = round(sum(mids) / len(mids), 2)
-            # 可比样本：本期与上一期都报价的（省份, 品种）
-            _common = [k for k in _cur_mid if k in _prev_mid]
-            _cmp_diff = None
-            if len(_common) >= 2:
-                _c_avg = sum(_cur_mid[k] for k in _common) / len(_common)
-                _p_avg = sum(_prev_mid[k] for k in _common) / len(_common)
-                _cmp_diff = round(_c_avg - _p_avg, 3)
-                _c_avg, _p_avg = round(_c_avg, 2), round(_p_avg, 2)
-            else:
-                _c_avg = _p_avg = None
-            cards = d.setdefault("trend_cards", [])
-            sh = None
-            for c in cards:
-                if "三黄" in (c.get("name") or ""):
-                    sh = c
-                    break
-            if sh is None:
-                sh = {"name": "三黄鸡", "unit": "元/斤",
-                      "chart": {"dates": [], "series": [{"name": "快大类出栏均价", "values": []}]}}
-                cards.append(sh)
-            ch = sh.setdefault("chart", {})
-            ch.setdefault("dates", [])
-            if not ch.get("series"):
-                ch["series"] = [{"name": "快大类出栏均价", "values": []}]
-            ch["series"][0].setdefault("values", [])
-            md = "%d/%d" % (today.month, today.day)
-
-            def _sk(x):
-                _m = re.match(r"(\d+)/(\d+)", str(x) or "")
-                return (int(_m.group(1)), int(_m.group(2))) if _m else (0, 0)
-
-            # 用农财宝典数据日期（ncb_date）而非抓取当天写点，避免错位日期造成假涨跌
-            point = ncb_date or md
-            if ch["dates"] and _sk(ch["dates"][-1]) >= _sk(point):
-                base = ch["dates"][:-1]
-                if base and _sk(base[-1]) == _sk(point):
-                    base = base[:-1]   # 去重：避免出现两个相同数据日
-                _tail = False          # 覆盖末点：dates/values 均保头部
-            else:
-                base = ch["dates"][-9:]
-                _tail = True           # 追加新点：dates/values 均保尾部
-            ch["dates"] = base[-9:] + [point]
-            # 2026-10-15 修复：dates 保尾而 values 原先保头 → 序列满 10 点后逐日整体错位。
-            # 本次线上「三黄鸡昨日 ↓1.05 元」即由此产生：显示 10/12=6.06 实为 10/8 的值，
-            # 真实 10/12=5.47，跌幅 0.46 元。
-            _sv = ch["series"][0]["values"]
-            if len(_sv) > len(base):
-                _sv = _sv[-len(base):] if _tail else _sv[:len(base)]
-            ch["series"][0]["values"] = _sv + [sh_avg]
-            # 涨跌方向：优先用「可比样本」环比（同省份/品种前后期对比），避免样本进出造成假跳变；
-            # 可比样本不足时才回退到主表各省环比多数决。
-            if _cmp_diff is not None and abs(_cmp_diff) < 0.005:
-                sh["dir"] = "flat"
-            elif _cmp_diff is not None:
-                sh["dir"] = "up" if _cmp_diff > 0 else "down"
-            else:
-                _sc = {"up": 0, "down": 0, "flat": 0}
-                for _r in tbl:
-                    _cd = _r[3] if isinstance(_r[3], dict) else {}
-                    _sc[_cd.get("dir", "flat")] = _sc.get(_cd.get("dir", "flat"), 0) + 1
-                if _sc["flat"] > _sc["up"] and _sc["flat"] > _sc["down"]:
-                    sh["dir"] = "flat"
-                elif _sc["up"] > _sc["down"]:
-                    sh["dir"] = "up"
-                elif _sc["down"] > _sc["up"]:
-                    sh["dir"] = "down"
-                else:
-                    sh["dir"] = "flat"
-            sh["price"] = fmt(sh_avg)
-            sh["note"] = ("冻品流通口径·快大类活禽出栏：%d省均价 %s 元/斤（区间 %s-%s）；"
-                          "数据源：农财宝典全国鸡价 %s（活禽鲜销参考源已停更，按规则清退）"
-                          % (len(rows), fmt(sh_avg), fmt(min(mids)), fmt(max(mids)), ncb_date))
-            # 样本集变动提示：源站每日选登省份不固定，跨期均价不完全可比，须显式告知
-            _dropped = [k for k in _prev_mid if k not in _cur_mid]
-            _added = [k for k in _cur_mid if k not in _prev_mid]
-            if (_dropped or _added) and _cmp_diff is not None:
-                sh["note"] += ("　|　【口径提示】样本较上期变动：%s；跨期全样本均价不完全可比，"
-                               "涨跌按同比 %d 省可比样本判定，实为%s %s 元/斤（%s→%s）。"
-                               % ("出%s/入%s" % (
-                                      "·".join(dict.fromkeys(a for a, b in _dropped)) or "无",
-                                      "·".join(dict.fromkeys(a for a, b in _added)) or "无")
-                                  if (_dropped or _added) else "无",
-                                  len(_common), "涨" if _cmp_diff > 0 else ("跌" if _cmp_diff < 0 else "持平"),
-                                  fmt(abs(_cmp_diff)), _p_avg, _c_avg))
-            elif _cmp_diff is None:
-                sh["note"] += ("　|　【口径提示】本期与上期可比省份不足 2 个，跨期均价不可比，请勿据此判趋势。")
-            print("三黄鸡速览卡: %s 元/斤 dir=%s（%s数据），历史 %d 天"
-                  % (sh["price"], sh["dir"], point, len(ch["dates"])))
+                if parts:
+                    mids.append(sum(parts) / len(parts))
+            sh_avg = round(sum(mids) / len(mids), 2) if mids else 0.0
+            print("农财宝典快大类（分省参照）: %d 省，均价 %s 元/斤（不参与速览卡）"
+                  % (len(rows), fmt(sh_avg)))
 
             # ===== 板块三「行情研判/核心信号/速览卡」随农财宝典最新一期日期每日重建 =====
             # 背景：此板块 analysis/banner/summary 曾是"一次性写入后被逐日继承"的静态稿，
@@ -2149,73 +2188,85 @@ def main():
                               float(re.split(r"-", r["price"])[0])) for r in rows),
                             key=lambda x: x[2])
             _loP, _hiP = _plist[0], _plist[-1]
-            _c817 = None
-            _up2 = None
-            if rows817:                     # 817 与三黄快大类同源互证，抓到时并进研判
-                _c817 = {"up": 0, "down": 0, "flat": 0}
-                for _r in rows817:          # rows817 为 dict 列表 [{region,spec,price,cell}]
-                    _cd = _r.get("cell") or {}
-                    _cd = _cd.get("dir", "flat") if isinstance(_cd, dict) else "flat"
-                    _c817[_cd] = _c817.get(_cd, 0) + 1
-                _up2 = ("817肉杂棚前（%s 数据）：%d 地报价，涨%d/跌%d/平%d，与快大类互相印证"
-                        % (d817, len(rows817), _c817["up"], _c817["down"], _c817["flat"]))
+            # 817（主口径）涨跌结构：源文自带涨跌标记，直接计数
+            _c817 = {"up": 0, "down": 0, "flat": 0}
+            for _r in (rows817 or []):      # rows817 为 dict 列表 [{region,spec,price,cell}]
+                _cd = _r.get("cell") or {}
+                _cd = _cd.get("dir", "flat") if isinstance(_cd, dict) else "flat"
+                _c817[_cd] = _c817.get(_cd, 0) + 1
+            if rows817 and _c817["up"] > _c817["down"]:
+                _m817w, _m817c = "较上期整体上行", "up"
+            elif rows817 and _c817["down"] > _c817["up"]:
+                _m817w, _m817c = "较上期整体回落", "down"
+            else:
+                _m817w, _m817c = "较上期整体持稳", "flat"
+            _big817 = (fmt(sum(_m817big) / len(_m817big)) if _m817big else "—")
+            _small817 = (fmt(sum(_m817small) / len(_m817small)) if _m817small else "—")
+            _line817 = None
+            if rows817:
+                _line817 = ("817肉杂棚前（%s 数据·**主口径**）：%d 个报价点均价 %s 元/斤"
+                            "（大规格 %s、小规格1.5-1.7斤 %s），涨%d/跌%d/平%d，%s"
+                            % (d817_real, len(_m817), fmt(_v817 or 0), _big817, _small817,
+                               _c817["up"], _c817["down"], _c817["flat"], _m817w))
             sec["analysis"] = {
                 "title": "📊 三黄鸡行情分析 · 今日涨落与采货参考",
-                "up": [
-                    "农财宝典 %s：快大类 %d 省报价，出栏均价 %s 元/斤（区间 %s-%s），%s"
+                "up": ([_line817] if _line817 else []) + [
+                    "农财宝典 %s（分省参照）：快大类 %d 省均价 %s 元/斤（区间 %s-%s），%s"
                     % (ncb_date, len(rows), fmt(sh_avg), fmt(min(mids)), fmt(max(mids)), _mood),
-                    "省际价差 %s 元/斤：%s%s %s vs %s%s %s（同属快大类，跨区先算运费）"
+                    "农财宝典省际价差 %s 元/斤：%s%s %s vs %s%s %s（该表含麻鸡类，跨区先算运费）"
                     % (fmt(_hiP[2] - _loP[2]), _loP[0], _loP[1], _loP[2],
                        _hiP[0], _hiP[1], _hiP[2]),
-                ] + ([_up2] if _up2 else []),
+                ],
                 "ref": [
-                    "快大类出栏价低=屠宰原料成本低：三黄整鸡冻品批发参考 4.9-5.25 元/斤，关注屠宰开工与冻品报价联动",
+                    "**主口径＝817肉杂棚前均价**（用户 2026-10-16 定：三黄鸡指的就是 817 肉杂这一路）；"
+                    "农财宝典「快大类」含麻鸡/青脚麻公，均价高出 1.5 元/斤以上，仅作分省参照，两口径不得混算",
+                    "棚前毛鸡价低=屠宰原料成本低：三黄整鸡冻品批发参考 4.9-5.25 元/斤，关注屠宰开工与冻品报价联动",
                     "活禽鲜销参考（三黄项/矮脚黄项 7.6-8.5）源站已停更 30+ 天，按「停更源不采用、"
                     "不展示」规则已从本板块清退，不作为冻品成本参考",
                     "农财宝典为华东/华南产区口径；山东本省快大类以鸡病兄弟品种棚前表为准，两源可交叉印证",
                 ],
             }
-            sec["banner"] = ("<strong>核心信号：</strong>冻品流通三黄鸡前端活禽<strong class='%s'>%s</strong>——"
-                             "农财宝典 %s 快大类均价 <strong class='%s'>%s 元/斤</strong>"
-                             "（%d 省，区间 %s-%s）%s"
-                             % (_mcls, _mood, ncb_date, _mcls, fmt(sh_avg), len(rows),
-                                fmt(min(mids)), fmt(max(mids)),
-                                ("；817肉杂（%s）同步抓取" % d817) if rows817 else ""))
-            if _c817 and any(_c817.values()):
-                if _c817["up"] > _c817["down"]:
-                    _s3c, _s3w = "up", "↑ 涨多"
-                elif _c817["down"] > _c817["up"]:
-                    _s3c, _s3w = "down", "↓ 落多"
-                else:
-                    _s3c, _s3w = "flat", "→ 平多"
-            else:
-                _s3c, _s3w = "flat", "→ 当日无涨跌"
             if rows817:
-                _s3label, _s3value = "817棚前（%s 数据）" % d817, "见下表"
-            elif brother_rows:
-                _s3label, _s3value = "快大类兄弟品种（鸡病）", "见下表"
+                sec["banner"] = ("<strong>核心信号：</strong>冻品流通三黄鸡前端活禽"
+                                 "（<strong>817肉杂·主口径</strong>）"
+                                 "<strong class='%s'>%s</strong>——%d 个报价点棚前均价 "
+                                 "<strong class='%s'>%s 元/斤</strong>（数据 %s；大规格 %s、小规格 %s）；"
+                                 "农财宝典快大类分省参照 %s 元/斤"
+                                 % (_m817c, _m817w, len(_m817), _m817c, fmt(_v817 or 0), d817_real,
+                                    _big817, _small817, fmt(sh_avg)))
             else:
-                _s3label, _s3value = "817/兄弟品种", "—"
+                sec["banner"] = ("<strong>核心信号：</strong>冻品流通三黄鸡前端活禽"
+                                 "<strong class='%s'>%s</strong>——本期 817 棚前未抓到（沿用上一期），"
+                                 "农财宝典快大类分省参照 %s 元/斤"
+                                 % (_mcls, _mood, fmt(sh_avg)))
             sec["summary"] = [
-                {"label": "快大类出栏均价（农财宝典 %s）" % ncb_date,
+                ({"label": "817肉杂棚前均价（主口径·%s）" % d817_real,
+                  "value": fmt(_v817 or 0), "unit": "元/斤",
+                  "trend": "<span class='%s'>%s %s</span>" % (
+                      _m817c, {"up": "↑", "down": "↓", "flat": "→"}[_m817c], _m817w)}
+                 if rows817 else
+                 {"label": "817肉杂棚前均价（主口径）", "value": "待更新", "unit": "",
+                  "trend": "<span class='flat'>本期未抓到，沿用上一期</span>"}),
+                {"label": "农财宝典快大类均价（分省参照·%s）" % ncb_date,
                  "value": fmt(sh_avg), "unit": "元/斤",
                  "trend": "<span class='%s'>%s %s</span>" % (
                      _mcls, {"up": "↑", "down": "↓", "flat": "→"}[_mcls],
                      {"up": "较上期上行", "down": "较上期回落", "flat": "较上期持稳"}[_mcls])},
-                {"label": "快大类省际区间", "value": "%s ~ %s" % (fmt(min(mids)), fmt(max(mids))),
+                {"label": "农财宝典省际区间（参照）",
+                 "value": "%s ~ %s" % (fmt(min(mids)), fmt(max(mids))),
                  "unit": "元/斤",
                  "trend": "<span class='flat'>%s%s 最低 / %s%s 最高</span>"
                           % (_loP[0], fmt(_loP[2]), _hiP[0], fmt(_hiP[2]))},
-                {"label": _s3label, "value": _s3value, "unit": " 元/斤",
-                 "trend": "<span class='%s'>%s</span>" % (_s3c, _s3w)},
             ]
-            print("三黄鸡研判/核心信号/速览卡随 %s 数据重建" % ncb_date)
+            print("三黄鸡研判/核心信号/速览卡随 817(%s) + 农财宝典(%s) 数据重建"
+                  % (d817_real, ncb_date))
     else:
         # ncb_aid 已定位到最新一期但正文未抓到（rows 为空）→ 降级：沿用上次报价并标注已定位日期
         if ncb_aid:
             sec = d["sections"][2]
-            sec["tag"] = ("快大类分省价 %s 已定位（农财宝典聚合页），正文暂未抓到、沿用上次报价；"
-                          "817肉杂同日抓取（%s）。" % (ncb_date or "?", d817))
+            sec["tag"] = ("主口径 817肉杂棚前（%s 数据）；农财宝典快大类分省参照 %s 已定位（聚合页），"
+                          "正文暂未抓到、沿用上次报价。"
+                          % (d817_real, ncb_date or "?"))
             print("农财宝典: 已定位最新一期 %s，正文未抓到，沿用原有报价" % (ncb_date or "?"))
         else:
             print("农财宝典: 未找到全国鸡价文章，沿用原有数据")
@@ -2225,7 +2276,7 @@ def main():
     # ② 鸡病专业网 青脚麻公鸡/麻公鸡/黄花公鸡（快大类兄弟品种）跨源参照，与农财宝典三黄鸡互为印证
     if brother_rows:
         bro_tbl = {
-            "cap": "快大类兄弟品种参照（鸡病专业网活禽棚前·云端每日更新）· 与农财宝典三黄鸡同属快大类，可交叉印证",
+            "cap": "快大类兄弟品种参照（鸡病专业网活禽棚前·云端每日更新）· 含麻鸡/黄花公等兄弟品种，与农财宝典分省参照同源，可交叉印证（主口径仍为 817 肉杂棚前）",
             "headers": ["产区", "品种（快大类兄弟）", "棚前价（元/斤）", "环比", "数据日期"],
             "rows": brother_rows,
         }
@@ -2265,7 +2316,7 @@ def main():
     # 而页面上的价格其实是 4 天前的。滞后 ≥2 天的源必须点名，避免误导采购决策。
     _stale, _lagged = [], []
     for _nm, _ds in (("淘汰鸡/鸡蛋汇总", sum_date), ("三黄鸡农财宝典", ncb_date),
-                     ("817肉杂", d817), ("白羽棚前", bro_date), ("白羽冻品日更", fz_date)):
+                     ("817肉杂", d817_real), ("白羽棚前", bro_date), ("白羽冻品日更", fz_date)):
         _lg = lag_days(_ds, today)
         if _lg is not None and _lg >= 2:
             _lagged.append("%s（%s·滞后%d天）" % (_nm, str(_ds).strip(), _lg))
