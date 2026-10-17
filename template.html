@@ -37,8 +37,9 @@ main{max-width:860px;margin:0 auto;padding:12px 12px 0}
 /* 速览卡 */
 .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
 .scard{background:var(--card);border-radius:14px;box-shadow:0 1px 4px rgba(30,58,47,.07);padding:12px 10px;position:relative;overflow:hidden}
-.scard .nm{font-size:12px;color:var(--ink);font-weight:700;margin-bottom:4px}
-.scard .nm-date{font-weight:700;color:var(--ink);margin-left:4px}
+.scard .nm{font-size:12px;color:var(--sub);margin-bottom:4px;display:flex;align-items:center;gap:5px}
+.scard .nm.bold{color:var(--ink);font-weight:700}
+.scard .nm-date{font-size:10px;font-weight:400;color:var(--sub);background:#f2f4f3;padding:1px 6px;border-radius:12px;white-space:nowrap}
 .scard .pr{font-size:18px;font-weight:800;letter-spacing:-.3px}
 .scard .pr small{font-size:10px;font-weight:400;color:var(--sub)}
 .scard .pr.up{color:var(--up)}
@@ -432,10 +433,12 @@ function renderCards(d){
         else if (df < -0.005){ dir = 'down'; ar = '↓'; }
       }
     }
-    /* 卡名旁的数据日期角标：取走势最后一个数据点（即该卡口径的实际数据日期），黑体非红 */
+    /* 卡名旁的数据日期角标：取走势最后一个数据点（即该卡口径的实际数据日期），灰底小角标不加粗 */
     var dts = ch.dates || [];
     var nmDate = dts.length ? esc(dts[dts.length - 1]) : '';
-    h += '<div class="scard"><div class="nm">' + esc(tc.name) + (nmDate ? '<span class="nm-date">' + nmDate + '</span>' : '') + '</div>' +
+    /* 仅「老母鸡」卡名加粗（用户 2026-10-17 指定） */
+    var nmBold = /老母鸡/.test(tc.name || '') ? ' bold' : '';
+    h += '<div class="scard"><div class="nm' + nmBold + '">' + esc(tc.name) + (nmDate ? '<span class="nm-date">' + nmDate + '</span>' : '') + '</div>' +
       '<div class="pr ' + dir + '">' + (ar ? '<span class="ar">' + ar + '</span>' : '') + esc(tc.price) + '<small> ' + esc((tc.unit||'').trim()) + '</small></div>' +
       '<div class="cmp">' + trendTags(vals) + '</div>' +
       sparkline(ch.dates || [], ch.series || []) +
