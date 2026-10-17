@@ -436,9 +436,8 @@ function renderCards(d){
     /* 卡名旁的数据日期角标：取走势最后一个数据点（即该卡口径的实际数据日期），灰底小角标不加粗 */
     var dts = ch.dates || [];
     var nmDate = dts.length ? esc(dts[dts.length - 1]) : '';
-    /* 仅「老母鸡」卡名加粗（用户 2026-10-17 指定） */
-    var nmBold = /老母鸡/.test(tc.name || '') ? ' bold' : '';
-    h += '<div class="scard"><div class="nm' + nmBold + '">' + esc(tc.name) + (nmDate ? '<span class="nm-date">' + nmDate + '</span>' : '') + '</div>' +
+    /* 卡名一律加粗（用户 2026-10-17 定：四张卡与老母鸡同款） */
+    h += '<div class="scard"><div class="nm bold">' + esc(tc.name) + (nmDate ? '<span class="nm-date">' + nmDate + '</span>' : '') + '</div>' +
       '<div class="pr ' + dir + '">' + (ar ? '<span class="ar">' + ar + '</span>' : '') + esc(tc.price) + '<small> ' + esc((tc.unit||'').trim()) + '</small></div>' +
       '<div class="cmp">' + trendTags(vals) + '</div>' +
       sparkline(ch.dates || [], ch.series || []) +
