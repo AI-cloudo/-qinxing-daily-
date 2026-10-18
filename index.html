@@ -655,7 +655,7 @@ function finishLoad(cands, manual){
   STATE._loaded = true;
 }
 /* ---------- 页面自我更新：摆脱手机浏览器缓存，保证拿到最新版页面 ---------- */
-var BUILD = "20261018-0300";
+var BUILD = "20261018-0557";
 function checkSelfUpdate(manual){
   fetch(location.href.split('#')[0] + (location.search ? '&' : '?') + '_cb=' + Date.now(), {cache: 'no-store'})
     .then(function(r){ if(!r.ok) throw 0; return r.text(); })
@@ -682,5 +682,5 @@ function checkSelfUpdate(manual){
   });
 })();
 </script>
-<div style="text-align:center;font-size:10px;color:#9aa;padding:6px 0 10px">页面版本 20261018-0300</div></body>
+<div style="text-align:center;font-size:10px;color:#9aa;padding:6px 0 10px">页面版本 20261018-0557</div></body>
 </html>
