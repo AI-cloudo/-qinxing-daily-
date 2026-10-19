@@ -214,8 +214,16 @@ function trendTag(vals, days, label, includeToday){
   var abs = Math.abs(diff).toFixed(2);
   return '<span class="tag ' + cls + '">' + label + arrow + abs + '</span>';
 }
-function trendTags(vals){
-  return trendTag(vals, 2, '昨日', true) + trendTag(vals, 3, '3天', false) + trendTag(vals, 7, '7天', false);
+function trendTags(vals, dates){
+  /* 数据滞后保护（2026-10-19）：若末点日期不是今天，说明该卡源站当日无新一期
+     （如 817 棚前栏周六日不发、农财宝典下午才发），继续写"昨日"会把上一期的涨跌
+     误读成当天行情 → 标签改为「上期(M/D)」，一眼看出是上一期的变动。 */
+  var lastD = (dates && dates.length) ? String(dates[dates.length - 1] || '') : '';
+  var _n = new Date();
+  var _t = (_n.getMonth() + 1) + '/' + _n.getDate();
+  var stale = !!lastD && lastD !== _t;
+  var lbl = stale ? ('上期(' + lastD + ')') : '昨日';
+  return trendTag(vals, 2, lbl, true) + trendTag(vals, 3, '3天', false) + trendTag(vals, 7, '7天', false);
 }
 
 /* ---------- 迷你折线 ---------- */
@@ -439,7 +447,7 @@ function renderCards(d){
     /* 卡名一律加粗（用户 2026-10-17 定：四张卡与老母鸡同款） */
     h += '<div class="scard"><div class="nm bold">' + esc(tc.name) + (nmDate ? '<span class="nm-date">' + nmDate + '</span>' : '') + '</div>' +
       '<div class="pr ' + dir + '">' + (ar ? '<span class="ar">' + ar + '</span>' : '') + esc(tc.price) + '<small> ' + esc((tc.unit||'').trim()) + '</small></div>' +
-      '<div class="cmp">' + trendTags(vals) + '</div>' +
+      '<div class="cmp">' + trendTags(vals, dts) + '</div>' +
       sparkline(ch.dates || [], ch.series || []) +
       '<div class="nt">' + esc(tc.note || '') + '</div></div>';
   });
