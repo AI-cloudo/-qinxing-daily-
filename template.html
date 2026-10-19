@@ -627,12 +627,14 @@ var SOURCES = [
 // 新鲜度评分：优先用 meta.oldest_date（报告里最旧板块的日期，越新整体越新鲜），
 // 带该字段的新构建一律优先于无该字段的旧构建；同组内再比 update_time
 function freshKey(j){
+  /* 2026-10-19 重写：原实现只比「最旧板块日期 + 时:分」，跨天时会把昨天的 09:16
+     判得比今天的 08:00 新；现改为 内容日期 | 更新时间(含日期) | 最旧日期 三段，
+     全部为 ISO/含日期的字符串，字典序即时间序。 */
   var m = (j && j.meta) || {};
-  var ut = (m.update_time || '');
-  var hhmm = ut.indexOf(' ') >= 0 ? ut.slice(ut.indexOf(' ') + 1) : '00:00';
-  if (m.oldest_date){ return '1' + m.oldest_date + ' ' + hhmm; }   // 新构建：1 开头，最旧日期越新越靠前
-  var ds = (m.date_iso || '').trim() || '2026-01-01';
-  return '0' + ds + ' ' + hhmm;                                    // 旧构建兜底：0 开头，永远排在带字段的之后
+  var cd = String(m.content_date || m.date_iso || '').trim();
+  var ut = String(m.update_time || '').trim();
+  var od = String(m.oldest_date || '').trim();
+  return cd + '|' + ut + '|' + od;
 }
 
 function load(manual){
@@ -654,12 +656,28 @@ function finishLoad(cands, manual){
   }
   cands.sort(function(a,b){ var x=freshKey(a), y=freshKey(b); return x<y ? 1 : x>y ? -1 : 0; });
   var j = cands[0];                               // 取内容最新的一份
-  var oldKey = ((STATE.data && STATE.data.meta && (STATE.data.meta.content_date || STATE.data.meta.date_iso)) || '') + '|' + ((STATE.data && STATE.data.meta && STATE.data.meta.update_time) || '');
-  var newKey = (j.meta.content_date || j.meta.date_iso || '') + '|' + (j.meta.update_time || '');
+  var cur = STATE.data;
+  var curKey = (cur && cur.meta) ? freshKey(cur) : '';
+  var newKey = freshKey(j);
+  /* 防倒退（2026-10-19 用户反馈"刷新后变新、过一会又退回旧界面"）：
+     三个源里 jsdelivr/raw 的边缘缓存常滞后数小时，若本次拿到的最好一份
+     仍比当前显示的旧，说明是 CDN 旧缓存 → 保持当前数据，绝不覆盖。 */
+  if (curKey && newKey < curKey){
+    if (manual) toast('云端返回的是旧缓存，已保持当前最新数据');
+    return;
+  }
+  var changed = (newKey !== curKey);
   STATE.data = j; STATE.src = 'live'; setBadge();
-  if (manual){ render(); toast('已更新到最新数据（' + (j.meta.update_time || '') + '）'); }
-  else if (!STATE._loaded){ render(); }
-  else if (newKey !== oldKey){ render(); toast('检测到新数据，已自动刷新'); }
+  writeCache(j);                                  // 供下次打开/重载直接渲染，不再退回页面快照
+  if (manual){
+    render();
+    toast(changed ? ('已更新到最新数据（' + (j.meta.update_time || '') + '）')
+                  : ('已是最新数据（' + (j.meta.update_time || '') + '）'));
+  } else if (!STATE._loaded){
+    render();
+  } else if (changed){
+    render(); toast('检测到新数据，已自动刷新');
+  }
   STATE._loaded = true;
 }
 /* ---------- 页面自我更新：摆脱手机浏览器缓存，保证拿到最新版页面 ---------- */
@@ -678,9 +696,24 @@ function checkSelfUpdate(manual){
     .catch(function(){ if (manual) toast('无法检查更新'); });
 }
 
-/* 初始：快照立即渲染，随后尝试拉取云端最新 */
+/* 本地缓存最近一次成功拉到的数据：页面重载/断网时先渲染它，
+   避免「刚刷新到最新 → 重载或网络抖动瞬间退回页面快照」的观感（2026-10-19） */
+var LS_DATA_KEY = 'wb_qinxing_lastdata_v1';
+function readCache(){
+  try { var s = localStorage.getItem(LS_DATA_KEY); return s ? JSON.parse(s) : null; } catch(e){ return null; }
+}
+function writeCache(j){
+  try { localStorage.setItem(LS_DATA_KEY, JSON.stringify(j)); } catch(e){}
+}
+
+/* 初始：本地缓存/页面快照立即渲染，随后尝试拉取云端最新 */
 (function init(){
-  STATE.data = SNAPSHOT; STATE.src = 'snap'; setBadge();
+  var cached = readCache();
+  var boot = (cached && cached.meta && (!SNAPSHOT.meta || freshKey(cached) > freshKey(SNAPSHOT)))
+             ? cached : SNAPSHOT;
+  STATE.data = boot;
+  STATE.src = 'snap';              // 首屏一律标「缓存」，拉到云端后自动转「实时」，状态不撒谎
+  setBadge();
   render();
   load(false);
   setInterval(function(){ load(false); }, 120000);
