@@ -113,6 +113,21 @@ footer{text-align:center;font-size:11px;color:#a3aca6;padding:18px 12px 8px;line
 .news .nitem .ndate{flex-shrink:0;font-size:10px;color:var(--sub);white-space:nowrap;background:#fff;padding:1px 6px;border-radius:8px}
 .news .nitem .nsrc{font-size:10px;color:var(--sub);margin-top:4px}
 .news .nitem-empty{text-align:center;color:var(--sub);font-size:12px;padding:14px}
+/* ===== 表格分层：棚前活禽（主线） / 冻品成品（附属，默认折叠） ===== */
+.grp-h{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--brand2);
+  letter-spacing:.3px;margin:2px 0 8px;padding-left:7px;border-left:3px solid var(--brand2)}
+.grp-h .gk{font-weight:400;color:var(--sub);font-size:10.5px}
+details.fold{margin:2px 0 10px;border-radius:10px;border:1px solid var(--line);background:#f8faf9;overflow:hidden}
+details.fold>summary{cursor:pointer;list-style:none;padding:9px 11px;font-size:11.5px;color:var(--sub);
+  display:flex;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::after{content:"展开";margin-left:auto;font-size:10px;color:var(--brand2);
+  border:1px solid var(--brand2);border-radius:9px;padding:0 7px;line-height:16px}
+details.fold[open]>summary::after{content:"收起"}
+details.fold[open]>summary{border-bottom:1px dashed var(--line);font-weight:700;color:var(--brand2)}
+details.fold .fold-in{padding:8px 9px 1px}
+details.fold-fz>summary{background:#f2f5f4}
+details.fold-bk>summary{background:#fafafa}
 </style>
 </head>
 <body>
@@ -486,6 +501,40 @@ function renderTabs(d){
   });
 }
 
+function tblHtml(s, si, ti){
+  var t = s.tables[ti] || {};
+  var cap = t.cap || '';
+  var h = cap ? '<div class="tbl-cap">' + esc(cap) + '</div>' : '';
+  h += '<div class="tbl-wrap"><table><thead><tr>';
+  (t.headers || []).forEach(function(x){ h += '<th>' + esc(x) + '</th>'; });
+  h += '<th style="width:26px"></th></tr></thead><tbody>';
+  (t.rows || []).forEach(function(row, ri){
+    h += '<tr>';
+    row.forEach(function(c){ h += cellHtml(c); });
+    var key = rowKey(si, ti, ri);
+    var on = STATE.favs[key] ? 'on' : '';
+    h += '<td><button class="fav-btn ' + on + '" data-k="' + key + '">' + (on ? '★' : '☆') + '</button></td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  return h;
+}
+/* 冻品层判据：只看表头，且必须命中「报价单位是公斤」或「冻品XX价」这类价格列。
+   不能用「表头含冻品」——农财宝典那张表头是「冻品流通品种（快大类）」，
+   它其实是活禽出栏价（元/斤），含「冻品」二字会被误归入冻品层。
+   白羽 3 张分割品表命中「元/公斤」；三黄鸡冻品表命中「冻品批发价」。 */
+function isFrozenTbl(t){
+  var hs = (t.headers || []).map(String).join('|');
+  if (/元\/公斤|元\/kg/i.test(hs)) return true;
+  return /冻品[^|]{0,4}价/.test(hs);
+}
+/* 备用源判据：仅淘汰鸡板块的鸡病《鸡蛋、淘汰鸡价格汇总》（表头第2列=淘汰鸡价）。
+   该栏淘汰鸡段不日更，已被博亚 19 省取代，收进折叠区避免两张表打架。 */
+function isBackupTbl(si, t){
+  var hs = (t.headers || []).map(String);
+  return si === 0 && hs.length >= 2 && /淘汰鸡价/.test(hs[1]);
+}
+
 function renderSection(d, si){
   var s = d.sections[si];
   var box = $('content');
@@ -506,22 +555,31 @@ function renderSection(d, si){
       ((a.ref && a.ref.length) ? '<div class="a-ref">' + a.ref.map(function(x){ return '💡 ' + esc(x) + '<br>'; }).join('') + '</div>' : '') +
       '</div>';
   }
+  /* 表格分层（2026-10-20 用户定：棚前活禽=主线，冻品成品=附属层，默认折叠）
+     ⚠ 判层只用 headers，绝不用 cap —— 817 表的 cap 里也写着「冻品三黄鸡原料基准」，
+     用 cap 判层会把棚前表误归进冻品（同 Mysteel 兜底、老母鸡 dir 的坑）。 */
+  var _fr = [], _fz = [], _bk = [];
   (s.tables || []).forEach(function(t, ti){
-    var cap = t.cap || '';
-    html += cap ? '<div class="tbl-cap">' + esc(cap) + '</div>' : '';
-    html += '<div class="tbl-wrap"><table><thead><tr>';
-    (t.headers || []).forEach(function(h){ html += '<th>' + esc(h) + '</th>'; });
-    html += '<th style="width:26px"></th></tr></thead><tbody>';
-    (t.rows || []).forEach(function(row, ri){
-      html += '<tr>';
-      row.forEach(function(c){ html += cellHtml(c); });
-      var key = rowKey(si, ti, ri);
-      var on = STATE.favs[key] ? 'on' : '';
-      html += '<td><button class="fav-btn ' + on + '" data-k="' + key + '">' + (on ? '★' : '☆') + '</button></td>';
-      html += '</tr>';
-    });
-    html += '</tbody></table></div>';
+    if (isFrozenTbl(t)) _fz.push(ti);
+    else if (isBackupTbl(si, t)) _bk.push(ti);
+    else _fr.push(ti);
   });
+  if (_fz.length && _fr.length){
+    html += '<div class="grp-h">棚前活禽<span class="gk">成本先行信号 · 后端成品涨落的先行指标</span></div>';
+  }
+  _fr.forEach(function(ti){ html += tblHtml(s, si, ti); });
+  if (_bk.length){
+    html += '<details class="fold fold-bk"><summary>🔁 备用源 · ' + _bk.length + ' 张表（更新偏慢，仅作交叉核验）</summary><div class="fold-in">';
+    _bk.forEach(function(ti){ html += tblHtml(s, si, ti); });
+    html += '</div></details>';
+  }
+  if (_fz.length){
+    var _nrow = 0;
+    _fz.forEach(function(ti){ _nrow += (((s.tables[ti] || {}).rows) || []).length; });
+    html += '<details class="fold fold-fz"><summary>📦 冻品成品 · ' + _fz.length + ' 张表 / ' + _nrow + ' 行（参考层，点开查看）</summary><div class="fold-in">';
+    _fz.forEach(function(ti){ html += tblHtml(s, si, ti); });
+    html += '</div></details>';
+  }
   /* 本板块研判：把综合研判里的对应块分发给各板块 */
   html += sectionJudge(d, si);
   box.innerHTML = html;
