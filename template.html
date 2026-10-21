@@ -448,7 +448,10 @@ function renderHealth(d){
   var hh = (d && d.meta && d.meta.health) || null;
   if (!hh || !hh.items || !hh.items.length){ box.innerHTML = ''; return; }
   var lv = (hh.level === 'fail' || hh.level === 'warn') ? hh.level : 'ok';
-  var label = lv === 'fail' ? '数据体检异常' : (lv === 'warn' ? '数据体检：有滞后' : '数据体检通过');
+  /* 2026-10-21：summary 自身已写成「X 项滞后 / X 项异常 / 全部 N 项通过」，
+     若 label 再带「有滞后/异常/通过」会重复成「…有滞后 · 2 项滞后（共 8 项）」。
+     故 label 统一收敛为「数据体检」，等级靠底色 + 圆点 + summary 表达。 */
+  var label = '数据体检';
   var head = '<div class="hlth ' + lv + '" id="hlthBar"><span class="dot"></span>' +
     '<span class="txt"><b>' + label + '</b> · ' + esc(hh.summary || '') +
     (hh.checked_at ? ' · ' + esc(hh.checked_at) : '') + '</span>' +
