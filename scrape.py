@@ -38,16 +38,27 @@ def text_lines(html):
 
 
 def collect_articles():
-    """从首页和两个栏目页收集最新文章链接 (url, title)"""
+    """从首页和两个栏目页收集最新文章链接 (url, title)
+
+    ⚠ 2026-10-21 修复（10/20 的 817 漏抓事故，性质是"抓取漏稿"不是"源站没发"）：
+    原实现只抓每个列表的**第一页**，而鸡病专业网每页仅 20 篇、且会**提前发布"明天"
+    的文章**（10/21 上午 /lists/192 首页已有「10月22日…棚前」）。发文高峰时，
+    当天文章几小时内就被挤到第 2~3 页 → latest() 取不到 → 页面表现为"断更"。
+    实证：10/20 的《部分地区肉杂817棚前价格行情》= view/521863 确实发了、8 个报价点
+    齐全，但 10/21 早上它落在 /lists/192 的第 3 页，第一页只剩 10/21、10/22 两篇。
+    故栏目页统一多翻 2 页（共 3 页 ≈ 最近 3-4 天），首页仍只取一页。
+    """
     arts = {}
     for path in ["", "/lists/279", "/lists/192"]:
-        try:
-            h = fetch(BASE + path)
-        except Exception as e:
-            print("[warn] 拉取列表失败 %s: %s" % (path, e))
-            continue
-        for m in re.finditer(r'href="(/view/\d+)"[^>]*title="([^"]+)"', h):
-            arts[m.group(2)] = BASE + m.group(1)
+        pages = [path] if path == "" else [path] + ["%s/%d" % (path, i) for i in (2, 3)]
+        for p in pages:
+            try:
+                h = fetch(BASE + p)
+            except Exception as e:
+                print("[warn] 拉取列表失败 %s: %s" % (p, e))
+                continue
+            for m in re.finditer(r'href="(/view/\d+)"[^>]*title="([^"]+)"', h):
+                arts[m.group(2)] = BASE + m.group(1)
     return arts
 
 
