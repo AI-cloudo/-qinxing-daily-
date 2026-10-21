@@ -79,6 +79,41 @@ jobs:
               print('  - %-8s %s' % (s.get('title', '')[:8], s.get('tag', '')))
           PY
 
+      # ===== 防静默：本轮没写出数据 / 体检不过，就让整个 run 变红 =====
+      # 背景（2026-10-21）：上面抓取步骤用了 set +e，脚本即使 exit 1 也会继续 build + commit，
+      # 结论照样显示 success。10/20 就是 817 变量未初始化导致整轮报废，但没人发现。
+      # 这里做两道硬判定：
+      #   ① data.json 的 update_time 必须属于今天 —— 否则说明本轮脚本根本没跑成功；
+      #   ② meta.health.level 不能是 fail —— 关键表行数异常/速览卡错位属于真故障。
+      # warn（某源滞后一天）不判失败，那是源站节奏。
+      - name: 数据完整性硬校验（失败则本轮标红）
+        run: |
+          python - <<'PY'
+          import json, datetime, sys
+          d = json.load(open('data.json', encoding='utf-8'))
+          m = d.get('meta') or {}
+          bj = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+          today = bj.strftime('%m-%d')
+          ut = str(m.get('update_time') or '')
+          h = m.get('health') or {}
+          print('本轮更新时间:', ut, '| 期望日期:', today)
+          print('体检:', h.get('level'), '|', h.get('summary'))
+          for it in (h.get('items') or []):
+              if it.get('level') != 'ok':
+                  print('  ! %s %s %s %s' % (it.get('sec'), it.get('what'),
+                                              it.get('date'), it.get('msg')))
+          bad = []
+          if not ut.startswith(today):
+              bad.append('data.json 不是本轮产物（update_time=%s）→ 抓取脚本很可能异常退出' % ut)
+          if h.get('level') == 'fail':
+              bad.append('数据体检未通过：%s' % h.get('summary'))
+          if bad:
+              for b in bad:
+                  print('::error::' + b)
+              sys.exit(1)
+          print('>>> 硬校验通过')
+          PY
+
       - name: 把最新数据与页面提交回仓库（作为明天的环比基准）
         run: |
           git config user.name "auto-report-bot"
