@@ -1123,6 +1123,136 @@ def lag_days(ds, today=None):
     return (today - d0).days
 
 
+def run_selfcheck(d, today):
+    """抓取后「数据体检」（2026-10-21 新增，用户要求"基础做扎实"）。
+
+    背景：10/15~10/21 一周内连续出了六次**静默失败**——
+      10/15 Mysteel 兜底表重复上线（唯一特征用了 cap 说明文字）
+      10/19 老母鸡取到鸡病"全持平"表 → 普跌被标成持平（同上，特征用错）
+      10/20 817 变量未初始化 → 整轮抓取 exit 1，博亚 126 行白抓
+      10/20 板块三 tag 日期位空白（"数据 ）"）
+      10/21 列表页只抓第一页 → 10/20 稿子被挤到第 3 页，漏抓
+      10/21 GitHub cron 两轮未触发，全站停在前一天
+    共性：**页面照常渲染、结论照样 success，用户只能靠自己比对日期发现**。
+
+    本函数在写盘前做一轮结构与时效校验，结果写入 meta.health，
+    由前端渲染成顶部状态条。原则：宁可显式写"这项滞后 1 天"，
+    也不让用户误以为看到的是今天的价。
+    """
+    items = []
+
+    def _date_of(s):
+        m = re.match(r"^(\d{1,2})[/\-](\d{1,2})$", str(s or "").strip())
+        if not m:
+            return None
+        mo, dd = int(m.group(1)), int(m.group(2))
+        y = today.year if (mo, dd) <= (today.month, today.day) else today.year - 1
+        try:
+            return datetime.date(y, mo, dd)
+        except ValueError:
+            return None
+
+    def add(sec, what, date_s, level, msg=""):
+        dt = _date_of(date_s)
+        lag = (today - dt).days if dt else None
+        items.append({"sec": sec, "what": what, "date": date_s or "",
+                      "lag": lag, "level": level, "msg": msg})
+
+    # ---- ① 速览卡：末点日期必须是今天，且 dates/values 必须等长 ----
+    for c in (d.get("trend_cards") or []):
+        nm = c.get("name") or ""
+        ch = c.get("chart") or {}
+        ds = ch.get("dates") or []
+        ser = (ch.get("series") or [{}])[0] or {}
+        vs = ser.get("values") or []
+        if not ds:
+            add(nm, "速览卡", "", "fail", "走势序列为空")
+            continue
+        if len(ds) != len(vs):
+            add(nm, "速览卡", ds[-1], "fail",
+                "dates %d 个 ≠ values %d 个（存在错位风险）" % (len(ds), len(vs)))
+            continue
+        dt = _date_of(ds[-1])
+        lag = (today - dt).days if dt else None
+        if lag is None:
+            add(nm, "速览卡", ds[-1], "warn", "日期无法解析")
+        elif lag <= 0:
+            add(nm, "速览卡", ds[-1], "ok")
+        else:
+            add(nm, "速览卡", ds[-1], "warn",
+                "末点滞后 %d 天（源站该日未发稿，已沿用上一期）" % lag)
+
+    # ---- ② 关键表：存在性 + 行数下限（低于下限说明解析退化或源改了结构）----
+    # (板块序号, 表头特征, 名称, 期望最少行数)；板块序号按 sections 顺序
+    key_tables = [
+        (0, "出场价（元/斤）", "淘汰鸡·博亚19省", 15),
+        (2, "817", "三黄鸡·817棚前", 6),
+        (4, "山东各市", "白羽·山东棚前", 10),
+        (4, "省外地区", "白羽·省外棚前", 20),
+    ]
+    secs = d.get("sections") or []
+    for si, hs_key, label, min_rows in key_tables:
+        if si >= len(secs):
+            add(label, "表", "", "fail", "整个板块缺失")
+            continue
+        found = None
+        for t in (secs[si].get("tables") or []):
+            hs = "|".join(str(x) for x in (t.get("headers") or []))
+            if hs_key in hs:
+                found = t
+                break
+        if not found:
+            add(label, "表", "", "fail", "本次未抓到该表")
+            continue
+        n = len(found.get("rows") or [])
+        if n < min_rows:
+            add(label, "表", "", "fail", "仅 %d 行（正常 ≥%d，可能解析退化）" % (n, min_rows))
+        else:
+            add(label, "表", "", "ok", "%d 行，正常" % n)
+
+    # ---- ③ 博亚淘汰鸡「全员持平」异常（10/19 事故的防呆）----
+    # 该表正常每天 3~8 省涨跌，19 省**全部**为「→ 持平」几乎只可能是取到了
+    # 《鸡蛋、淘汰鸡价格汇总》里那段不日更的淘汰鸡（多期同值），必须报出来。
+    for si in range(min(len(secs), 1)):
+        for t in (secs[0].get("tables") or []):
+            hs = [str(x) for x in (t.get("headers") or [])]
+            if len(hs) >= 3 and "出场价" in hs[1] and "涨跌" in hs[2]:
+                rows = t.get("rows") or []
+                flat = sum(1 for r in rows if len(r) > 2 and re.search(r"持平|^→$", str(r[2])))
+                if rows and flat == len(rows) and len(rows) >= 15:
+                    add("淘汰鸡", "博亚涨跌列", "", "warn",
+                        "%d 省全部「持平」，疑似取到未更新的汇总表" % len(rows))
+                break
+
+    lv = [x["level"] for x in items]
+    level = "fail" if "fail" in lv else ("warn" if "warn" in lv else "ok")
+    ok_n = lv.count("ok")
+    warn_n = lv.count("warn")
+    fail_n = lv.count("fail")
+    if level == "ok":
+        summary = "全部 %d 项通过" % ok_n
+    else:
+        parts = []
+        if fail_n:
+            parts.append("%d 项异常" % fail_n)
+        if warn_n:
+            parts.append("%d 项滞后" % warn_n)
+        summary = " · ".join(parts) + "（共 %d 项）" % len(items)
+
+    bj = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+    d.setdefault("meta", {})["health"] = {
+        "level": level,
+        "summary": summary,
+        "checked_at": bj.strftime("%m-%d %H:%M"),
+        "items": items,
+    }
+    print("[健康] %s：%s" % (level, summary))
+    for it in items:
+        if it["level"] != "ok":
+            print("   ! %-10s %-16s %-6s %s" % (it["sec"], it["what"], it["date"], it["msg"]))
+    return level
+
+
 def main():
     today = datetime.date.today()
     date_cn = "%d年%d月%d日" % (today.year, today.month, today.day)
@@ -2596,6 +2726,16 @@ def main():
                 print("[warn] needs_replacement 回写失败:", _e)
     except Exception as e:
         print("[warn] 停更源策略执行失败（不阻断抓取）:", e)
+
+    # ===== 数据体检（必须在策略清理之后：被清退的表不应再计入校验）=====
+    # 自检本身失败绝不能影响出数，所以整段兜住。
+    try:
+        run_selfcheck(d, today)
+    except Exception as e:
+        print("[warn] 数据体检失败（不阻断出数）:", e)
+        d.setdefault("meta", {})["health"] = {
+            "level": "warn", "summary": "体检脚本异常，未完成校验",
+            "checked_at": "", "items": []}
 
     # ===== 保存 =====
     # new_state 在上方各板块里逐步填充（如 ncb_seed / sanhuang），这里补齐基础字段
