@@ -120,6 +120,10 @@ jobs:
           git config user.email "actions@github.com"
           git add data.json state.json index.html
           git diff --cached --quiet || git commit -m "自动更新 $(date -u +'%Y-%m-%d %H:%M') UTC"
+          # push 前先拉平远端：周一早 AI 精修自动化会推 scrape.py/build.py/src_policy.json，
+          # 与定时抓取同时段提交会撞车（2026-10-26 两次 push rejected (fetch first)）。
+          # 精修不动 data.json，rebase 无冲突；--autostash 兜住未暂存改动。
+          git pull --rebase --autostash origin main
           git push
 
       - name: 配置 GitHub Pages
