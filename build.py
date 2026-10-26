@@ -58,8 +58,14 @@ def build_badges(data):
 
     def _gap(md):
         d1 = _dt.date(today.year, md[0], md[1])
-        if d1 > today:                      # 跨年（1月 vs 上年12月）
-            d1 = _dt.date(today.year - 1, md[0], md[1])
+        if d1 > today:
+            # 2026-10-26 修正：AI 周研判写的是当天日期（如 tag「AI周度研判 10-26」），
+            # 而 meta 基准日常落后一天（今晨数据未跑），旧逻辑按跨年回退误判滞后近一年。
+            # 仅 11/12月 vs 1/2月 属真跨年，其余未来日期视为同步（gap=0）。
+            if md[0] >= 11 and today.month <= 2:
+                d1 = _dt.date(today.year - 1, md[0], md[1])
+                return (today - d1).days
+            return 0
         return (today - d1).days
 
     def _date_col(s, kw='数据日期'):
