@@ -115,7 +115,12 @@ def parse_summary(html):
     for line in text_lines(html):
         m = re.match(
             r"(\S+?)地区：(.+?)(?:红蛋散筐大码|红蛋|鸡蛋)?\s*([0-9]+(?:\.[0-9]+)?(?:-[0-9.]+)?)元/斤"
-            r"[，,]?\s*(落|涨|与昨日相比持平|稳)?[，,;；]?\s*(?:淘汰鸡([0-9.]+)元/斤)?",
+            # 2026-11-02 修复：原式为 (落|涨|与昨日相比持平|稳)，只能匹配「与昨日相比持平」，
+            # 匹配不到「与昨日相比涨/落」→ ①当日氛围永远退化成「稳为主」
+            # ②该行后面的「淘汰鸡X元/斤」整段解析失败，导致淘汰鸡表漏省
+            #   （实测 11/1：河南/江苏/山东三省全是「与昨日相比涨」，全部漏掉，
+            #    板块一只剩 8 省，均价 4.67 被抬高/失真，山东 4.80 直接消失）。
+            r"[，,]?\s*(?:与昨日相比)?(涨|落|持平|稳)?[，,;；]?\s*(?:淘汰鸡([0-9.]+)元/斤)?",
             line,
         )
         if not m:
@@ -1350,6 +1355,21 @@ def main():
         if r["egg"]:
             egg_by_prov.setdefault(r["prov"], []).append(r["egg"])
 
+    # ===== 环比基准（2026-11-02 修复：同日多轮运行把基准写成当日值 → 全判「持平」）=====
+    # 云端 Actions 每天 8/9/10 点各跑一次，同一篇文章会让 state.json 在同一天被写成
+    # 当日值；第 2/3 轮再比对必然得 0，于是页面最终展示的（最后一轮的）环比列全是「→」，
+    # 与源文「与昨日相比涨」直接矛盾（实测 11/1：源文 13 省涨，页面写成 20 省全平）。
+    # 修法：state 另存 prev_cull / prev_egg（上一交易日值）；同日重跑时用 prev_* 比对，
+    # 只在数据日期真正推进时才把当期值挪进 prev_*。
+    _iso_day = ""
+    if sum_date:
+        _sm = re.match(r"^(\d{1,2})/(\d{1,2})$", sum_date)
+        if _sm:
+            _iso_day = "%04d-%02d-%02d" % (today.year, int(_sm.group(1)), int(_sm.group(2)))
+    _same_day = bool(_iso_day) and str(state.get("date") or "") == _iso_day
+    _prev_cull_base = (state.get("prev_cull") or {}) if _same_day else (state.get("cull") or {})
+    _prev_egg_base = (state.get("prev_egg") or {}) if _same_day else (state.get("egg") or {})
+
     if cull_by_prov:
         cull_avg = {p: round(sum(v) / len(v), 2) for p, v in cull_by_prov.items()}
         cities_by_prov = {}
@@ -1357,7 +1377,7 @@ def main():
             if r["cull"]:
                 cities_by_prov.setdefault(r["prov"], []).append(r["city"])
         rows = []
-        prev_cull = state.get("cull", {})
+        prev_cull = _prev_cull_base
         for p in sorted(cull_avg, key=lambda x: -cull_avg[x]):
             note = "/".join(cities_by_prov[p][:4])
             if len(cities_by_prov[p]) > 4:
@@ -1388,7 +1408,7 @@ def main():
                 cur = trend_by_prov.setdefault(r["prov"], {"down": 0, "up": 0, "flat": 0})
                 cur[r["trend"]] = cur.get(r["trend"], 0) + 1
         rows = []
-        prev_egg = state.get("egg", {})
+        prev_egg = _prev_egg_base
         for p in sorted(egg_avg, key=lambda x: -egg_avg[x]):
             t = trend_by_prov.get(p, {})
             mood = max(t, key=t.get) if t else "flat"
@@ -2132,16 +2152,53 @@ def main():
     print("817文章(%s)解析行数: %d" % (d817, len(rows817)))
 
     # 数据日期校正：该栏为滚动更新页，报价日 = 正文对比基准日 + 1（见 parse_817 注释）
+    # 【2026-11-02 修复跨月事故】bday 是纯日号不带月份：11/1 文章 8 条全是「与31日相比」
+    # （31 日属十月），旧逻辑 _dd=31+1=32>31 → 暴力翻月成 12/1。正确数据日 = 11/1。
+    # 新逻辑：①bday 取众数（抗个别滞后行）；②bday→完整日期用真实日历（标题月不合法
+    # 或 bday 明显大于标题日号 → 属上个月）；③+1 天用 timedelta；④结果必须落在
+    # [today-6, today+1]，否则判可疑退回标题日期。
     d817_real = d817
     if rows817:
-        _b = rows817[0].get("bday")
-        _tmo = re.search(r"(\d+)月(\d+)日", (hit[1] if hit else ""))
-        if _b:
-            _mo = int(_tmo.group(1)) if _tmo else today.month
-            _dd = _b + 1
-            if _dd > 31:
-                _mo, _dd = (_mo % 12) + 1, 1
-            _cand = "%d/%d" % (_mo, _dd)
+        import datetime as _dt
+        _tmo_m = re.search(r"(\d+)月(\d+)日", (hit[1] if hit else ""))
+        _tmo = int(_tmo_m.group(1)) if _tmo_m else today.month
+        _tdd = int(_tmo_m.group(2)) if _tmo_m else today.day
+        _blist = [r["bday"] for r in rows817 if r.get("bday") is not None]
+        if _blist:
+            _cnt = {}
+            for _b in _blist:
+                _cnt[_b] = _cnt.get(_b, 0) + 1
+            _b = max(_cnt, key=lambda k: (_cnt[k], k))
+            _bdate = None
+            try:
+                _bdate = _dt.date(today.year, _tmo, _b)      # 合法性由 datetime 校验
+            except ValueError:
+                _pm = _tmo - 1 or 12
+                _py = today.year if _tmo > 1 else today.year - 1
+                try:
+                    _bdate = _dt.date(_py, _pm, _b)          # 11月无31日 → 属10月
+                except ValueError:
+                    _bdate = None
+            if _bdate is not None and _bdate > _dt.date(today.year, _tmo, _tdd) \
+                    and _b > _tdd + 15:
+                _pm = _tmo - 1 or 12                          # 标题11/1、bday=31 → 属10月
+                _py = today.year if _tmo > 1 else today.year - 1
+                try:
+                    _bdate = _dt.date(_py, _pm, _b)
+                except ValueError:
+                    pass
+            if _bdate is not None:
+                _d = _bdate + _dt.timedelta(days=1)
+                _lo = today - _dt.timedelta(days=6)
+                _hi = today + _dt.timedelta(days=1)
+                if _lo <= _d <= _hi:
+                    _cand = "%d/%d" % (_d.month, _d.day)
+                else:
+                    print("[warn] 817 日期校正结果 %d/%d 超出 [%s,%s] 窗口，退回标题日期 %s"
+                          % (_d.month, _d.day, _lo, _hi, d817))
+                    _cand = d817 or ("%d/%d" % (_tmo, _tdd))
+            else:
+                _cand = d817 or ("%d/%d" % (_tmo, _tdd))
             _key = lambda s: (int(str(s).split("/")[0]) * 100 + int(str(s).split("/")[1])) \
                 if re.match(r"^\d+/\d+$", str(s) or "") else (0)
             if not d817 or _key(_cand) >= _key(d817):
@@ -2745,7 +2802,19 @@ def main():
 
     # ===== 保存 =====
     # new_state 在上方各板块里逐步填充（如 ncb_seed / sanhuang），这里补齐基础字段
+    if _iso_day:                      # state.date 记「数据日期」而非抓取日，供同日重跑判定
+        new_state["date"] = _iso_day
     new_state.setdefault("date", today.isoformat())
+    # 上一交易日基准持久化（见上方 _same_day 注释）：数据日期推进时才更新 prev_*
+    if cull_by_prov or egg_by_prov:
+        if _same_day:
+            new_state["prev_cull"] = state.get("prev_cull", {})
+            new_state["prev_egg"] = state.get("prev_egg", {})
+            new_state["prev_date"] = state.get("prev_date", "")
+        else:
+            new_state["prev_cull"] = state.get("cull", {})
+            new_state["prev_egg"] = state.get("egg", {})
+            new_state["prev_date"] = state.get("date", "")
     new_state.setdefault(
         "cull", {p: round(sum(v) / len(v), 2) for p, v in cull_by_prov.items()} if cull_by_prov else state.get("cull", {}))
     new_state.setdefault("egg", egg_avg if egg_by_prov else state.get("egg", {}))
