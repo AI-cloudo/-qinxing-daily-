@@ -105,7 +105,19 @@ def build_badges(data):
             # tag 句式: 数据日期 9/4 · 鸡病专业网 · 云端自动更新
             m = re.search(r'数据日期\s*(\d{1,2})[/\-.](\d{1,2})', tag)
             md = (int(m.group(1)), int(m.group(2))) if m else _date_col(s)
-            push('鸡病专业网', md)
+            if tab == '淘汰鸡':
+                # 2026-11-02：主口径=博亚和讯（真日更、与速览卡同源）置首；
+                # 鸡病汇总淘汰鸡段滞后（多期同值），降为佐证源单独标日期（≥2天自动⚠）。
+                ds = _each_date(tag)
+                pb = tag.find('博亚和讯')
+                if pb >= 0:
+                    push('博亚和讯', _nearest(ds, pb) or md)
+                if '鸡病汇总' in tag:
+                    push('鸡病专业网', _nearest(ds, tag.find('鸡病汇总')))
+                else:               # 兼容旧 tag（鸡病主导、首日期即鸡病汇总）
+                    push('鸡病专业网', md)
+            else:
+                push('鸡病专业网', md)
 
         elif tab == '三黄鸡':
             # tag 句式: 快大类分省价 9/3 云端抓取（农财宝典）；817肉杂同日抓取（9/4）
