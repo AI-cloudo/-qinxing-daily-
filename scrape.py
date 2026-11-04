@@ -789,6 +789,69 @@ def boyar_trend(chgs):
     return {"t": {"up": "↑", "down": "↓", "flat": "→"}[d], "dir": d}
 
 
+def boyar_move_stat(rows):
+    """博亚淘鸡表当日涨跌结构 → (涨市数, 平市数, 跌市数, 领涨省列表, 领涨幅, 领跌省列表, 领跌幅)
+
+    2026-11-04 新增：速览卡均价是「19省等权」，单个省涨 0.10 对均价只贡献 0.005，
+    两位小数看不出来。实测 11/3 吉林/黑龙江/新疆/内蒙共 15 市齐涨 0.10，
+    同时浙江、江西各跌 0.20，均价纹丝不动仍显示「持平」——用户在卡上完全看不出东北在涨。
+    故 note 必须补充「涨/平/跌家数 + 领涨/领跌省」，让持平也带信息量。
+    省列表按幅度排序（并列同幅度时全部返回，避免"只报一个省"误导成单省行情）。
+    """
+    if not rows:
+        return None
+    up = flat = dn = 0
+    by_prov = {}
+    for r in rows:
+        try:
+            c = float(r.get("chg") or 0)
+        except (TypeError, ValueError):
+            c = 0.0
+        if c > 0.001:
+            up += 1
+        elif c < -0.001:
+            dn += 1
+        else:
+            flat += 1
+        p = (r.get("prov") or "").strip()
+        if p:
+            by_prov.setdefault(p, []).append(c)
+    pc = {p: sum(v) / len(v) for p, v in by_prov.items() if v}
+    if not pc:
+        return (up, flat, dn, [], 0.0, [], 0.0)
+    tmax = max(pc.values())
+    bmin = min(pc.values())
+    tps = sorted([p for p in pc if abs(pc[p] - tmax) < 0.001])
+    bts = sorted([p for p in pc if abs(pc[p] - bmin) < 0.001])
+    return (up, flat, dn, tps, tmax, bts, bmin)
+
+
+def boyar_move_note(rows):
+    """把 boyar_move_stat 的结果拼成 note 片段；无数据返回空串。"""
+    st = boyar_move_stat(rows)
+    if not st:
+        return ""
+    up, flat, dn, tps, tc, bts, bc = st
+    if up == 0 and dn == 0:
+        return "当日 %d 市全部持平。" % len(rows)
+
+    def _lab(ps, val):
+        ps = [p.rstrip("省") for p in ps]
+        if len(ps) > 3:
+            return "%s等%d省%+.2f" % ("/".join(ps[:3]), len(ps), val)
+        return "%s%+.2f" % ("/".join(ps), val)
+
+    txt = "当日 %d 市中 %d涨/%d平/%d跌" % (len(rows), up, flat, dn)
+    bits = []
+    if tc > 0.001:
+        bits.append("领涨 " + _lab(tps, tc))
+    if bc < -0.001:
+        bits.append("领跌 " + _lab(bts, bc))
+    if bits:
+        txt += "，" + "、".join(bits)
+    return txt + "。"
+
+
 # ===== 博亚和讯《全国部分地区鸡蛋出场价格》→ 鸡蛋分省/分市出场价【日更】 =====
 # 2026-10-14 新增：替代**已停更**的 mffb「主销区蛋价表」（mffb 最新一期停在 8/28，
 # 连续 7 周无新文；页面侧那张「主销区」表是它的遗留快照，无 cap 未被策略扫到）。
@@ -2889,8 +2952,17 @@ def main():
             else:
                 tc["dir"] = "flat"
             tc["price"] = fmt(nat)     # 大数字与 note/走势末值同值（原来 price 长期不更新）
-            _note = ("全国淘汰鸡均价 %s 元/斤（%s，%d省）。云端自动更新，数据源：%s。"
-                     % (fmt(nat), _src_date, len(_avg_map), _src_name))
+            _note = ("全国淘汰鸡均价 %s 元/斤（%s，%d省）。"
+                     % (fmt(nat), _src_date, len(_avg_map)))
+            # 2026-11-04：补当日涨跌家数与领涨/领跌省——19省等权会把单省 ±0.10 稀释成 0.005，
+            # 均价持平可能底下是"东北整片在涨、华东在跌"，note 不给结构就完全看不出来。
+            # 只在博亚当期实抓时给（沿用/兜底口径没有当日涨跌列，不能编）。
+            if _bj_live and bj_rows_raw:
+                try:
+                    _note += boyar_move_note(bj_rows_raw)
+                except Exception as _e:
+                    print("[warn] 博亚涨跌结构统计失败:", _e)
+            _note += "云端自动更新，数据源：%s。" % _src_name
             # 跨源提示：鸡病专业网同口径若仍停在旧价，明确写出滞后，避免被当成当日价
             if (_bj_live or _bj_carried) and cull_avg:
                 _cnat = round(sum(cull_avg.values()) / len(cull_avg), 2)
