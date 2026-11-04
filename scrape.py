@@ -1128,6 +1128,134 @@ def lag_days(ds, today=None):
     return (today - d0).days
 
 
+def _count_dirs(sec):
+    """统计某板块首张表里的涨/平/跌家数，返回 (up, flat, down) 或 None。
+
+    用途：速览卡连续同值时，判断"均值为横盘"到底是明细真的全平，
+    还是各省有涨有跌被平均掉了（后者说明源站在动，只是均价不敏感）。
+    """
+    tabs = (sec or {}).get("tables") or []
+    if not tabs:
+        return None
+    up = fl = dn = 0
+    for row in (tabs[0].get("rows") or []):
+        for cell in row:
+            if isinstance(cell, dict):
+                dv = cell.get("dir")
+                if dv == "up":
+                    up += 1
+                elif dv == "down":
+                    dn += 1
+                elif dv == "flat":
+                    fl += 1
+            else:
+                s = str(cell or "")
+                if "↑" in s:
+                    up += 1
+                elif "↓" in s:
+                    dn += 1
+                elif "持平" in s or s.strip() == "→":
+                    fl += 1
+    if up + fl + dn == 0:
+        return None
+    return (up, fl, dn)
+
+
+def _flat_verify_gj(times=6):
+    """公鸡卡「连续同值」的源头复核（2026-11-04 用户要求：标黄后必须真跑一遍核查）。
+
+    复核对象 = 鸡病专业网《M月D日817、麻鸡成鸡、鸡苗价格行情汇总》——
+    它是**每日更新**的全产区汇总稿，同一篇里既有成鸡价（元/斤）也有鸡苗价（元/羽）。
+    判别逻辑：
+      · 连续 N 期成鸡价一字不变、但鸡苗价有变动 → 源站在正常更新，成鸡价属**真实横盘** → 通过
+      · 成鸡价与鸡苗价全部一字不变、各期内容雷同     → 疑为**整篇照抄**（等同停更）→ 不通过
+      · 抓不到/期数不足                              → 复核未完成 → 不通过（但不判故障）
+    返回 (通过?, 结论文案)
+    """
+    try:
+        arts = {}
+        # 汇总稿一天一篇，栏目页每页 15 条且掺着各产区日报 → 需翻到第 7 页才凑得够 6 期
+        for p in ["/lists/192"] + ["/lists/192/%d" % i for i in range(2, 8)]:
+            try:
+                h = fetch(BASE + p, timeout=25)
+            except Exception:
+                continue
+            for m in re.finditer(r'href="(/view/\d+)"[^>]*>(.*?)</a>', h, re.S):
+                t = re.sub(r"<[^>]+>", "", m.group(2))
+                t = re.sub(r"\s+", "", t)
+                if t and "汇总" in t and "817" in t:
+                    arts.setdefault(t, BASE + m.group(1))
+        if len(arts) < 3:
+            return (False, "复核未完成：仅取到 %d 期全产区汇总稿（需 ≥3 期）" % len(arts))
+
+        def _key(t):
+            m = re.match(r"(\d+)月(\d+)日", t)
+            return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+
+        picked = sorted(arts.items(), key=lambda x: _key(x[0]), reverse=True)[:times]
+        cheng, miao, bodies = [], [], []
+        for t, u in picked:
+            try:
+                ls = text_lines(fetch(u, timeout=25))
+            except Exception:
+                continue
+            c = tuple(re.sub(r"\s+", "", l) for l in ls if "元/斤" in l and len(l) < 170)
+            m2 = tuple(re.sub(r"\s+", "", l) for l in ls if "元/羽" in l and len(l) < 170)
+            if not c:
+                continue
+            cheng.append(c)
+            miao.append(m2)
+            bodies.append(tuple(re.sub(r"\s+", "", l) for l in ls if len(l) < 170))
+        n = len(cheng)
+        if n < 3:
+            return (False, "复核未完成：可解析的全产区汇总稿仅 %d 期" % n)
+        if len(set(cheng)) > 1:
+            return (False, "复核发现源站成鸡价已变动，页面未同步（疑抓取或解析失败）")
+        if len(set(miao)) > 1:
+            chg = len(set(miao))
+            return (True, "已复核：近 %d 期全产区汇总稿成鸡价连续持平，但鸡苗价有 %d 种不同取值 "
+                          "→ 源站每日正常更新，成鸡价属真实横盘" % (n, chg))
+        if len(set(bodies)) > 1:
+            return (True, "已复核：近 %d 期成鸡与鸡苗价不变，但正文描述有更新 → 源站仍在更新，"
+                          "成鸡价属真实横盘" % n)
+        return (False, "复核异常：近 %d 期全产区汇总稿成鸡、鸡苗价与正文完全一致，"
+                       "疑为源站整篇照抄（等同停更）" % n)
+    except Exception as e:
+        return (False, "复核未完成（%s）" % str(e)[:40])
+
+
+def _flat_verify_boyar(today):
+    """老母鸡卡「连续同值」的源头复核（2026-11-04）。
+
+    博亚和讯原文自带"上期/本期/涨跌"，是判断"全平"真伪最直接的证据：
+      · 最新一期 126 市涨跌列全为 0        → 源文本身就全平，真实横盘 → 通过
+      · 有城市涨跌、但 19 省均价未变        → 涨跌互相抵消，卡显示持平正确 → 通过
+      · 抓不到 / 最新期日期早于卡末点日期   → 复核未完成 → 不通过（但不当故障）
+    返回 (通过?, 结论文案)
+    """
+    try:
+        url, dstr = boyar_latest()
+        if not url:
+            return (False, "复核未完成：取不到博亚最新一期")
+        rows = parse_boyar_tj(boyar_fetch(url))
+        if not rows:
+            return (False, "复核未完成：博亚最新一期解析 0 行")
+        nz = [r for r in rows if abs(float(r["chg"])) > 0.001]
+        ups = sum(1 for r in nz if float(r["chg"]) > 0)
+        dns = len(nz) - ups
+        avg = sum(float(r["cur"]) for r in rows) / len(rows)
+        md = re.search(r"(\d{1,2})[/\-](\d{1,2})", str(dstr) or "")
+        if md and (int(md.group(1)), int(md.group(2))) != (today.month, today.day):
+            return (False, "复核未完成：博亚最新一期为 %s，尚未发当日稿" % dstr)
+        if not nz:
+            return (True, "已复核：博亚 %s 共 %d 行价格与上期逐行相同（涨跌列全为 0），"
+                          "源文本就是横盘" % (dstr, len(rows)))
+        return (True, "已复核：博亚 %s 有 %d 市涨跌（%d涨/%d跌，126市均价 %.2f），"
+                      "涨跌互相抵消 → 均价持平属正常" % (dstr, len(nz), ups, dns, avg))
+    except Exception as e:
+        return (False, "复核未完成（%s）" % str(e)[:40])
+
+
 def run_selfcheck(d, today):
     """抓取后「数据体检」（2026-10-21 新增，用户要求"基础做扎实"）。
 
@@ -1228,6 +1356,57 @@ def run_selfcheck(d, today):
                     add("淘汰鸡", "博亚涨跌列", "", "warn",
                         "%d 省全部「持平」，疑似取到未更新的汇总表" % len(rows))
                 break
+
+    # ---- ④ 速览卡「连续同值」：先标黄，再**自动跑一遍核查**（2026-11-04 用户要求）----
+    # 用户原话：「标黄治标不治本，标黄了就跑一遍核查，不应该标黄就完了」。
+    # 触发：末 5 个数据点完全相同。核查方式：
+    #   · 公鸡卡 → 回源站逐期比对全产区汇总稿（成鸡价 vs 鸡苗价），见 _flat_verify_gj
+    #   · 其余卡 → 看该板块明细的涨/平/跌家数：明细有涨跌说明均价被摊平、源数据在动 → 通过
+    #   核查通过记 ok（附结论），核不了或发现照抄才记 warn。
+    _CARD_SEC = (("老母鸡", 0), ("三黄鸡", 2), ("公鸡", 3), ("白羽", 4))
+
+    def _sec_of(nm):
+        for k, si in _CARD_SEC:
+            if k in nm:
+                return si
+        return None
+
+    for c in (d.get("trend_cards") or []):
+        nm = c.get("name") or ""
+        ch = c.get("chart") or {}
+        ds = ch.get("dates") or []
+        vs = ((ch.get("series") or [{}])[0] or {}).get("values") or []
+        if len(vs) < 5 or len(ds) < 5:
+            continue
+        tail = []
+        for v in vs[-5:]:
+            try:
+                tail.append(round(float(v), 3))
+            except (TypeError, ValueError):
+                tail = []
+                break
+        if len(tail) < 5 or len(set(tail)) > 1:
+            continue
+        val = fmt(vs[-1])
+        if "公鸡" in nm:
+            okv, vmsg = _flat_verify_gj()
+            add(nm, "连续同值", ds[-1], "ok" if okv else "warn",
+                "连续 5 点均为 %s·%s" % (val, vmsg))
+            continue
+        if "老母鸡" in nm:
+            okv, vmsg = _flat_verify_boyar(today)
+            add(nm, "连续同值", ds[-1], "ok" if okv else "warn",
+                "连续 5 点均为 %s·%s" % (val, vmsg))
+            continue
+        si = _sec_of(nm)
+        cnt = _count_dirs(secs[si] if (si is not None and si < len(secs)) else None)
+        if cnt and (cnt[0] + cnt[2]) > 0:
+            add(nm, "连续同值", ds[-1], "ok",
+                "连续 5 点均为 %s，但明细 %d涨/%d平/%d跌 → 均价被摊平，源数据在动"
+                % (val, cnt[0], cnt[1], cnt[2]))
+        else:
+            add(nm, "连续同值", ds[-1], "warn",
+                "连续 5 点均为 %s 且明细全平，未做跨源复核（请人工确认源站是否照抄）" % val)
 
     lv = [x["level"] for x in items]
     level = "fail" if "fail" in lv else ("warn" if "warn" in lv else "ok")
@@ -2060,7 +2239,16 @@ def main():
             if not _nums:
                 continue
             _km = re.search(r"(\d+)/(\d+)", _dt)
-            _krows.append((_r[0], _nm, sum(_nums) / len(_nums), _km.group(0) if _km else ""))
+            # 2026-11-04：保留每行涨跌方向，用于卡 note 的「N涨/N平/N跌」计数
+            # （用户反映"公鸡卡持平七天"分不清是真实横盘还是解析故障，先把家数摆出来）
+            _cdir = ""
+            try:
+                _cc = _r[3]
+                _cdir = (_cc.get("dir") or "") if isinstance(_cc, dict) else ""
+            except Exception:
+                _cdir = ""
+            _krows.append((_r[0], _nm, sum(_nums) / len(_nums),
+                           _km.group(0) if _km else "", _cdir or "flat"))
         if _krows:
             _kavg = round(sum(x[2] for x in _krows) / len(_krows), 2)
             _kds = [x[3] for x in _krows if x[3]]
@@ -2115,10 +2303,15 @@ def main():
             ck["dir"] = (trend_cell(_kavg, prev_val)["dir"] if prev_val is not None else "flat")
             ck["price"] = fmt(_kavg)
             ck["wt_title"] = "近10日数据点（各省公鸡棚前均价）"
+            _kup = sum(1 for x in _krows if len(x) > 4 and x[4] == "up")
+            _kdn = sum(1 for x in _krows if len(x) > 4 and x[4] == "down")
+            _kfl = len(_krows) - _kup - _kdn
             ck["note"] = ("各省公鸡棚前价 %d 产区均价 %s 元/斤（区间 %s-%s，%s数据）· "
+                          "当日 %d涨/%d平/%d跌 · "
                           "数据源：鸡病专业网各产区日报 · 云端每日更新（停更源已清退）"
                           % (len(_krows), fmt(_kavg), fmt(min(x[2] for x in _krows)),
-                             fmt(max(x[2] for x in _krows)), point))
+                             fmt(max(x[2] for x in _krows)), point,
+                             _kup, _kfl, _kdn))
             print("公鸡速览卡: %s 元/斤 dir=%s（%s数据，%d产区），历史 %d 天"
                   % (ck["price"], ck["dir"], point, len(_krows), len(ch["dates"])))
         else:
