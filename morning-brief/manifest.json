@@ -1,0 +1,26 @@
+{
+  "name": "禽类上游行情晨报",
+  "short_name": "行情日报",
+  "description": "老母鸡 · 鸡蛋 · 三黄鸡 · 公鸡，每天早上 8 点前更新",
+  "start_url": "./index.html?sharecode=NTSAMIQXY5",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f7f5",
+  "theme_color": "#1f6b52",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
