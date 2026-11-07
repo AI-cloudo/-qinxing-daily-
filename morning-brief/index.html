@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>11.7号行情日报</title>
+
+<!-- 手机"添加到主屏幕"用：图标 + 名称 + 全屏显示 -->
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="manifest" href="./manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="行情日报">
+<meta name="theme-color" content="#1f6b52">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<!-- 每次打开都取最新，不走缓存 -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<style>
+  :root{
+    --up:#d63b3b; --down:#0f9d5f; --flat:#8a9691;
+    --ink:#1c2622; --sub:#5c6b64; --line:#e3e9e5;
+    --card:#ffffff; --bg:#f4f7f5; --accent:#1f6b52; --accent-soft:#eaf3ee;
+    --warn:#b8860b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    font-size:15px;line-height:1.72;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:640px;margin:0 auto;padding:14px 14px 40px}
+
+  /* 顶部 */
+  .hero{background:linear-gradient(135deg,#1f6b52,#2d8a68);color:#fff;border-radius:16px;padding:18px 18px 16px}
+  .hero .k{font-size:12px;opacity:.85;letter-spacing:.5px}
+  .hero h1{margin:4px 0 2px;font-size:23px;font-weight:700;letter-spacing:-.3px}
+  .hero .meta{font-size:12px;opacity:.9;margin-top:8px;line-height:1.7}
+  .hero .meta b{font-weight:600;opacity:1}
+
+  /* 开头结论 */
+  .verdict{background:#fff;border-radius:14px;padding:15px 17px;margin-top:12px;
+    border-left:4px solid var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .verdict .lb{font-size:12px;color:var(--accent);font-weight:700;letter-spacing:.5px;margin-bottom:6px}
+  .verdict p{margin:0;font-size:15.5px;font-weight:600;line-height:1.78}
+
+  /* 品类卡 */
+  .cat{background:var(--card);border-radius:14px;padding:15px 16px;margin-top:12px;
+    box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .cat-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:2px}
+  .cat-h .nm{font-size:17px;font-weight:700}
+  .tag{font-size:11px;padding:2px 7px;border-radius:20px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .tag.g{background:#f0f2f1;color:var(--sub)}
+  .price{margin:6px 0 2px;display:flex;align-items:baseline;gap:8px}
+  .price .v{font-size:30px;font-weight:800;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+  .price .u{font-size:13px;color:var(--sub)}
+  .chg{font-size:17px;font-weight:700}
+  .up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--flat)}
+
+  /* 走势图 */
+  .spark{width:100%;height:46px;display:block;margin:6px 0 4px}
+
+  /* 大白话段落 —— 核心 */
+  .plain{background:#f7faf8;border-radius:11px;padding:13px 15px;margin-top:10px;
+    border:1px solid #e6efe9}
+  .plain p{margin:0;font-size:15px;line-height:1.85}
+
+  /* 表格 */
+  .tbl-title{font-size:12px;color:var(--sub);margin-top:12px;font-weight:600}
+  table{width:100%;border-collapse:collapse;margin-top:7px;font-size:13.5px}
+  th,td{padding:7px 4px;text-align:left;border-bottom:1px solid var(--line)}
+  th{font-size:11.5px;color:var(--sub);font-weight:600}
+  td.n{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+
+  /* 建议 */
+  .acts{margin-top:4px}
+  .act{display:flex;gap:9px;font-size:14.5px;line-height:1.8;margin-bottom:9px;align-items:flex-start}
+  .act .b{flex:0 0 auto;font-weight:700;color:#fff;background:var(--accent);
+    border-radius:6px;padding:1px 8px;font-size:12.5px;margin-top:4px;white-space:nowrap}
+
+  .hint{font-size:13px;color:var(--sub);margin-top:8px;line-height:1.75}
+
+  /* 资讯 */
+  .news{background:#fff;border-radius:14px;padding:14px 16px;margin-top:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .news h3{margin:0 0 8px;font-size:14.5px;font-weight:700}
+  .news a{display:block;color:var(--ink);text-decoration:none;font-size:13.5px;padding:7px 0;
+    border-bottom:1px solid var(--line);line-height:1.6}
+  .news a:last-child{border-bottom:none}
+  .news a span{color:var(--sub);font-size:11.5px;margin-left:6px}
+
+  .foot{margin-top:16px;font-size:11.5px;color:var(--sub);text-align:center;line-height:1.85}
+  .src{background:#fff;border-radius:12px;padding:12px 14px;margin-top:12px;font-size:12px;color:var(--sub);line-height:1.85;
+    box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .src b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="k">上游行情 · 每天早上 8 点前送到</div>
+    <h1>11.7号行情日报</h1>
+    <div class="meta">数据日期 <b>11/07</b> ｜ 更新于 <b>2026-11-07 08:27</b><br>
+      老母鸡 · 鸡蛋 · 三黄鸡 · 公鸡　价格和原因都在下面</div>
+  </div>
+
+  <div class="verdict">
+    <div class="lb">先看这里</div>
+    <p>老母鸡还是4块67分，三黄鸡817涨到3块59分，公鸡还是5块99分。鸡蛋涨到4块42分。</p>
+  </div>
+
+  <div class="cat">
+  <div class="cat-h"><span class="nm">老母鸡</span><span class="tag">主品类</span></div>
+  <div class="price"><span class="v">4.67</span><span class="u"> 元/斤</span><span class="chg flat">→</span></div>
+  <svg class="spark" viewBox="0 0 600 52" preserveAspectRatio="none"><path d="M7.0 45.0 L72.1 45.0 L137.2 7.0 L202.3 45.0 L267.4 45.0 L332.6 45.0 L397.7 45.0 L462.8 45.0 L527.9 45.0 L593.0 45.0 L593.0 45.0 L7.0 45.0 Z" fill="#8a9691" opacity=".10"/><path d="M7.0 45.0 L72.1 45.0 L137.2 7.0 L202.3 45.0 L267.4 45.0 L332.6 45.0 L397.7 45.0 L462.8 45.0 L527.9 45.0 L593.0 45.0" fill="none" stroke="#8a9691" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="7.0" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="72.1" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="137.2" cy="7.0" r="2.6" fill="#8a9691"/><circle cx="202.3" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="267.4" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="332.6" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="397.7" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="462.8" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="527.9" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="593.0" cy="45.0" r="2.6" fill="#8a9691"/></svg>
+  <div class="plain"><p>老母鸡今天没动，还是4块67分。前阵子蛋价掉下去的时候，养鸡的扎堆卖鸡，把价格砸下来了；现在蛋价慢慢回上来了，卖鸡的少了，但鸡价还没真跟着涨，现在就是在原地等。要提醒大家一句：鸡蛋4块42分一天没停，老母鸡4块67分这么一平，就是这笔账还没算完——蛋价涨上来是早晚的事，老母鸡跟着涨也就是这两天的功夫。跟客户谈价的时候心里要有数，别把价报低了。</p></div>
+</div><div class="cat">
+  <div class="cat-h"><span class="nm">鸡蛋</span><span class="tag g">跟老母鸡一起看</span></div>
+  <div class="plain"><p>鸡蛋今天涨了，4块42分。鸡蛋这两天一直在涨，各地蛋价基本都在往上走。鸡蛋一涨，养鸡的就舍不得让老母鸡退场了——反正蛋还在赚钱，鸡还能再养一阵。所以老母鸡这边的货会慢慢变少，这是接下来最要注意的事。（目前老母鸡全国平均4块67分。）</p></div>
+  <div class="tbl-title">各地蛋价（元/斤）</div><table><tr><th>省份</th><th>蛋价</th><th>比昨天</th></tr><tr><td>广东</td><td class='n'>4.91</td><td class='n up'>↑0.04</td></tr><tr><td>福建</td><td class='n'>4.8</td><td class='n up'>↑0.10</td></tr><tr><td>甘肃</td><td class='n'>4.6</td><td class='n up'>↑0.17</td></tr><tr><td>北京</td><td class='n'>4.55</td><td class='n up'>↑0.12</td></tr><tr><td>陕西</td><td class='n'>4.53</td><td class='n down'>↓0.01</td></tr><tr><td>浙江</td><td class='n'>4.53</td><td class='n up'>↑0.11</td></tr></table>
+</div><div class="cat">
+  <div class="cat-h"><span class="nm">三黄鸡</span><span class="tag g">冻品原料</span></div>
+  <div class="price"><span class="v">3.59</span><span class="u"> 元/斤</span><span class="chg up">↑</span></div>
+  <svg class="spark" viewBox="0 0 600 52" preserveAspectRatio="none"><path d="M7.0 43.1 L72.1 32.9 L137.2 21.1 L202.3 7.0 L267.4 29.0 L332.6 45.0 L397.7 37.0 L462.8 25.2 L527.9 17.2 L593.0 7.0 L593.0 45.0 L7.0 45.0 Z" fill="#d63b3b" opacity=".10"/><path d="M7.0 43.1 L72.1 32.9 L137.2 21.1 L202.3 7.0 L267.4 29.0 L332.6 45.0 L397.7 37.0 L462.8 25.2 L527.9 17.2 L593.0 7.0" fill="none" stroke="#d63b3b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="7.0" cy="43.1" r="2.6" fill="#d63b3b"/><circle cx="72.1" cy="32.9" r="2.6" fill="#d63b3b"/><circle cx="137.2" cy="21.1" r="2.6" fill="#d63b3b"/><circle cx="202.3" cy="7.0" r="2.6" fill="#d63b3b"/><circle cx="267.4" cy="29.0" r="2.6" fill="#d63b3b"/><circle cx="332.6" cy="45.0" r="2.6" fill="#d63b3b"/><circle cx="397.7" cy="37.0" r="2.6" fill="#d63b3b"/><circle cx="462.8" cy="25.2" r="2.6" fill="#d63b3b"/><circle cx="527.9" cy="17.2" r="2.6" fill="#d63b3b"/><circle cx="593.0" cy="7.0" r="2.6" fill="#d63b3b"/></svg>
+  <div class="plain"><p>三黄鸡的料鸡817今天涨了，3块59分。817 这阵子一直在往上走，跟鸡苗涨、鸡农惜着养都有关系。这是我们三黄鸡冻品最直接的原料，涨了成本就上去、跌了就有空间。</p></div>
+</div><div class="cat">
+  <div class="cat-h"><span class="nm">公鸡</span><span class="tag g">活禽</span></div>
+  <div class="price"><span class="v">5.99</span><span class="u"> 元/斤</span><span class="chg flat">→</span></div>
+  <svg class="spark" viewBox="0 0 600 52" preserveAspectRatio="none"><path d="M7.0 45.0 L72.1 45.0 L137.2 45.0 L202.3 45.0 L267.4 45.0 L332.6 45.0 L397.7 45.0 L462.8 45.0 L527.9 45.0 L593.0 45.0 L593.0 45.0 L7.0 45.0 Z" fill="#8a9691" opacity=".10"/><path d="M7.0 45.0 L72.1 45.0 L137.2 45.0 L202.3 45.0 L267.4 45.0 L332.6 45.0 L397.7 45.0 L462.8 45.0 L527.9 45.0 L593.0 45.0" fill="none" stroke="#8a9691" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="7.0" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="72.1" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="137.2" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="202.3" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="267.4" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="332.6" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="397.7" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="462.8" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="527.9" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="593.0" cy="45.0" r="2.6" fill="#8a9691"/></svg>
+  <div class="plain"><p>公鸡今天没动，六个产区平均5块99分。麻鸡公、黄花公这些品种，各地报的价本来就不一样，今天整体还是老样子。各产区最低的4块3毛、最高的9块钱，差得不少。跨区比价的时候记得把运费算进去，光看单价容易比亏。咱们本地菏泽这边：青脚麻公鸡 4.60-4.80 元/斤；大红公鸡 8.00-9.00 元/斤。</p></div>
+</div><div class="cat">
+  <div class="cat-h"><span class="nm">我们手上还有什么货</span><span class="tag g">接单前看一眼</span></div>
+  <table><tr><th>品类</th><th>大概还能卖</th></tr><tr><td>老母鸡</td><td class='n '>19 天</td></tr><tr><td>三黄鸡</td><td class='n '>17 天</td></tr><tr><td>公鸡</td><td class='n '>43 天</td></tr></table>
+  <div class="hint" style="margin-top:8px">这几类有 老母鸡 2 个、三黄鸡 2 个、公鸡 1 个 品项已经断了货，跟客户报价前先确认有没有货。</div>
+</div><div class="cat"><div class="cat-h"><span class="nm">今天跟客户怎么说</span></div><div class="acts"><div class="act"><span class="b">报价格</span><span>老母鸡今天没动，价可以按老价报，但蛋价在往上走，后面可能跟涨，先别把价压太低。</span></div><div class="act"><span class="b">跟客户</span><span>鸡蛋在涨这件事要主动跟客户提一句——养鸡的现在不肯卖老母鸡，这是往后涨价的原因，提前讲比事后解释好使。</span></div><div class="act"><span class="b">推三黄鸡</span><span>817 在涨，三黄鸡冻品的成本跟着上，跟客户谈三黄鸡的时候要把这个说清楚，别让对方觉得是乱涨。</span></div><div class="act"><span class="b">推公鸡</span><span>公鸡这边货源不紧，可以多推一推，拿它带动别的品一起卖。</span></div></div></div>
+
+  <div class="news">
+    <h3>行业里的事（有空看看）</h3>
+    <a href="https://www.jbzyw.com/view/523670" target="_blank">国家肉鸡产业技术体系2026年新审定品种科技成果展示<span>鸡病专业网</span></a><a href="https://www.jbzyw.com/view/523645" target="_blank">蛋鸡产能周期切换：10月持续去库，11月在产存栏迎来阶段性拐点<span>鸡病专业网</span></a><a href="https://www.jbzyw.com/view/523644" target="_blank">白羽肉鸡产业链10月复盘及11月趋势研判<span>鸡病专业网</span></a><a href="https://www.jbzyw.com/view/523641" target="_blank">辽宁北票天勤蛋鸡项目投资1.2亿元规划存栏100万羽<span>鸡病专业网</span></a><a href="https://www.jbzyw.com/view/523640" target="_blank">新疆枣园万康200万只蛋鸡项目环评重新报批<span>鸡病专业网</span></a>
+  </div>
+
+  <div class="src">
+    <b>价格从哪来的：</b>博亚和讯（全国各省淘汰鸡、鸡蛋出场价）· 鸡病专业网（817肉杂、各地产区鸡价）· 网易农财宝典（快大类分省价）<br>
+    <b>几个说明：</b>老母鸡＝全国19省淘汰鸡出场价的平均数；三黄鸡＝817肉杂棚前价，也就是我们进的原料鸡；公鸡＝六个主产区棚前价的平均数。<br>
+    <b>怎么来的：</b>本地实时抓取。行情每天都在变，报价以实际谈的为准。
+  </div>
+
+  <div class="foot">
+    注意：3 项滞后（共 10 项）（部分源站更新节奏偏慢，该项按它最新一期算，正文里已标明日期）<br>
+    WorkBuddy 自动生成，每天早上自动更新到最新行情。
+  </div>
+
+</div>
+<script>
+  // 每次打开都强制取最新版本，避免手机用缓存的旧内容
+  // （iOS「添加到主屏幕」后对网页缓存比较顽固）
+  (function () {
+    var v = "11/07-1794011302";
+    if (v) { document.documentElement.setAttribute("data-build", v); }
+  })();
+</script>
+</body>
+</html>
