@@ -1,0 +1,44 @@
+name: 发布晨报到 Pages
+
+# 晨报推送后单独发布，不与每日行情抓取耦合。
+# 背景（2026-11-07）：WorkBuddy 定时任务在桌面应用没开时不会准时触发
+# （配 7:20 实际 8:26 才跑），导致线上还是前一天的内容。
+# 所以晨报改走「LaunchAgent → 推 GitHub → 本 workflow 发布」这条不依赖本机的通道。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'morning-brief/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 不阻塞每日行情抓取（两者都写 Pages，串行更安全）
+concurrency:
+  group: pages-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: 上传页面
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: 发布到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
