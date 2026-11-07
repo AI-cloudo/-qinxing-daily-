@@ -66,6 +66,37 @@
     border:1px solid #e6efe9}
   .plain p{margin:0;font-size:15px;line-height:1.85}
 
+  /* 传导链总览 —— 一眼看懂谁带动谁 */
+  .chain{background:linear-gradient(135deg,#f0f7f3,#f7fbf9);border-radius:14px;
+    padding:14px 16px;margin-top:12px;border:1px solid #dcebe3}
+  .ctitle{font-size:12.5px;font-weight:700;color:var(--accent);margin-bottom:10px;
+    letter-spacing:.3px}
+  .chnode{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    font-size:13px;padding:6px 0;border-bottom:1px dashed rgba(31,107,82,.13)}
+  .chnode:last-child{border-bottom:none}
+  .cfrm{background:var(--accent);color:#fff;border-radius:6px;padding:2px 8px;
+    font-weight:700;font-size:12.5px;white-space:nowrap}
+  .carw{color:var(--accent);font-weight:700}
+  .cto{background:#fff;border:1px solid #cfe3d9;border-radius:6px;padding:2px 8px;
+    font-weight:600;font-size:12.5px;white-space:nowrap}
+  .cstate{font-weight:700;font-variant-numeric:tabular-nums;font-size:13px;
+    color:var(--ink);white-space:nowrap}
+  .cwhy{color:var(--sub);font-size:12.5px;flex:1 1 100%;padding-left:2px;line-height:1.6}
+
+  /* 一句话结论 */
+  .fhead{font-size:14.5px;font-weight:600;line-height:1.75;margin-top:8px;
+    color:#24443a}
+
+  /* 因素分行 —— 每条一个原因，条理清楚 */
+  .facs{margin-top:9px}
+  .fac{display:flex;gap:8px;font-size:14px;line-height:1.8;padding:6px 0;
+    border-top:1px solid #eef3f0;align-items:flex-start}
+  .fac:first-child{border-top:none}
+  .fn{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--accent);
+    background:var(--accent-soft);border-radius:5px;padding:2px 7px;margin-top:3px;
+    white-space:nowrap}
+  .ft{flex:1;color:#2a3a33}
+
   /* 表格 */
   .tbl-title{font-size:12px;color:var(--sub);margin-top:12px;font-weight:600}
   table{width:100%;border-collapse:collapse;margin-top:7px;font-size:13.5px}
@@ -101,39 +132,40 @@
   <div class="hero">
     <div class="k">上游行情 · 每天早上 8 点前送到</div>
     <h1>11.7号行情日报</h1>
-    <div class="meta">数据日期 <b>11/07</b> ｜ 更新于 <b>2026-11-07 08:43</b><br>
+    <div class="meta">数据日期 <b>11/07</b> ｜ 更新于 <b>2026-11-07 10:24</b><br>
       老母鸡 · 鸡蛋 · 三黄鸡 · 公鸡　价格和原因都在下面</div>
   </div>
 
   <div class="verdict">
     <div class="lb">先看这里</div>
-    <p>老母鸡还是4块67分，三黄鸡817涨到3块59分，公鸡还是5块99分。鸡蛋涨到4块42分。</p>
+    <p>先说明天的：11/8 的三黄鸡料鸡817，源站已经报出来了，6 个地方跌、2 个地方持平。老母鸡还是4块67分，三黄鸡817涨到3块59分，公鸡还是5块99分。鸡蛋还是4块42分。</p>
   </div>
 
-  <div class="cat">
-  <div class="cat-h"><span class="nm">老母鸡</span><span class="tag">主品类</span></div>
+  <div class="chain"><div class="ctitle">先看这条线：谁带动谁</div><div class="chnode"><span class="cfrm">鸡蛋</span><span class="carw">→</span><span class="cto">老母鸡</span><span class="cstate">4块42分 →</span><span class="cwhy">蛋涨→养鸡的舍不得卖鸡→鸡变少→鸡价涨</span></div><div class="chnode"><span class="cfrm">鸡苗·屠场</span><span class="carw">→</span><span class="cto">三黄鸡817</span><span class="cstate">3块59分 ↑</span><span class="cwhy">苗贵成本高、收鸡凶价格就硬</span></div><div class="chnode"><span class="cfrm">饭店·食堂</span><span class="carw">→</span><span class="cto">公鸡</span><span class="cstate">5块99分 →</span><span class="cwhy">要货多→出栏抢→价格硬</span></div></div><div class="cat">
+  <div class="cat-h"><span class="nm">鸡蛋</span><span class="tag g">发动机</span></div>
+  <div class="price"><span class="v">4.42</span><span class="u"> 元/斤</span><span class="chg flat">→</span></div>
+  <div class="fhead">鸡蛋没动，4块42分—— 这轮行情的发动机，后面的鸡价都跟着它走。</div>
+  <div class="facs"><div class="fac"><span class="fn">现在什么情况</span><span class="ft">鸡蛋今天没怎么动，全国平均4块42分。</span></div><div class="fac"><span class="fn">为什么没动</span><span class="ft">现在供需两边都不太动，该淘汰的已经淘汰过一轮，补栏的鸡还没到产蛋的时候，所以价格就在原地待着。</span></div><div class="fac"><span class="fn">接下来看什么</span><span class="ft">蛋价是这轮行情的发动机，它先动，老母鸡才跟着动，所以蛋价比鸡价更值得盯。</span></div></div>
+</div><div class="cat">
+  <div class="cat-h"><span class="nm">老母鸡</span><span class="tag">主</span></div>
   <div class="price"><span class="v">4.67</span><span class="u"> 元/斤</span><span class="chg flat">→</span></div>
-  <svg class="spark" viewBox="0 0 600 52" preserveAspectRatio="none"><path d="M7.0 45.0 L72.1 45.0 L137.2 7.0 L202.3 45.0 L267.4 45.0 L332.6 45.0 L397.7 45.0 L462.8 45.0 L527.9 45.0 L593.0 45.0 L593.0 45.0 L7.0 45.0 Z" fill="#8a9691" opacity=".10"/><path d="M7.0 45.0 L72.1 45.0 L137.2 7.0 L202.3 45.0 L267.4 45.0 L332.6 45.0 L397.7 45.0 L462.8 45.0 L527.9 45.0 L593.0 45.0" fill="none" stroke="#8a9691" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="7.0" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="72.1" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="137.2" cy="7.0" r="2.6" fill="#8a9691"/><circle cx="202.3" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="267.4" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="332.6" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="397.7" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="462.8" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="527.9" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="593.0" cy="45.0" r="2.6" fill="#8a9691"/></svg>
-  <div class="plain"><p>老母鸡今天没动，还是4块67分。前阵子蛋价掉下去的时候，养鸡的扎堆卖鸡，把价格砸下来了；现在蛋价慢慢回上来了，卖鸡的少了，但鸡价还没真跟着涨，现在就是在原地等。要提醒大家一句：鸡蛋4块42分一天没停，老母鸡4块67分这么一平，就是这笔账还没算完——蛋价涨上来是早晚的事，老母鸡跟着涨也就是这两天的功夫。跟客户谈价的时候心里要有数，别把价报低了。</p></div>
+  <div class="fhead">老母鸡没动，4块67分（全国19省平均）</div>
+  <div class="facs"><div class="fac"><span class="fn">现在什么情况</span><span class="ft">老母鸡今天没动，还是4块67分，全国19个省的价格都一样。</span></div><div class="fac"><span class="fn">为什么没动</span><span class="ft">两个原因顶着谁。一个是前面蛋价低的时候，鸡农扎堆卖鸡，把价格砸到了这个位置；另一个是蛋价也在横着，两边都在等，谁都不肯先动。</span></div><div class="fac"><span class="fn">为什么该关注</span><span class="ft">鸡蛋这几天也在横着，两边都在等——养鸡的等蛋价再涨、屠场等鸡价再跌。这种时候最容易出冷不丁的行情，盯住蛋价的动静。</span></div><div class="fac"><span class="fn">跟我们什么关系</span><span class="ft">老母鸡就是我们冻品最直接的成本。它涨，我们卖货的价就得往上走；它不动，成本就稳着。</span></div><div class="fac"><span class="fn">后面怎么看</span><span class="ft">蛋价和老母鸡现在一个节奏，先这么走着，看蛋价下一步往哪边。</span></div></div>
 </div><div class="cat">
-  <div class="cat-h"><span class="nm">鸡蛋</span><span class="tag g">跟老母鸡一起看</span></div>
-  <div class="plain"><p>鸡蛋今天涨了，4块42分。鸡蛋这两天一直在涨，各地蛋价基本都在往上走。鸡蛋一涨，养鸡的就舍不得让老母鸡退场了——反正蛋还在赚钱，鸡还能再养一阵。所以老母鸡这边的货会慢慢变少，这是接下来最要注意的事。（目前老母鸡全国平均4块67分。）</p></div>
-  <div class="tbl-title">各地蛋价（元/斤）</div><table><tr><th>省份</th><th>蛋价</th><th>比昨天</th></tr><tr><td>广东</td><td class='n'>4.91</td><td class='n up'>↑0.04</td></tr><tr><td>福建</td><td class='n'>4.8</td><td class='n up'>↑0.10</td></tr><tr><td>甘肃</td><td class='n'>4.6</td><td class='n up'>↑0.17</td></tr><tr><td>北京</td><td class='n'>4.55</td><td class='n up'>↑0.12</td></tr><tr><td>陕西</td><td class='n'>4.53</td><td class='n down'>↓0.01</td></tr><tr><td>浙江</td><td class='n'>4.53</td><td class='n up'>↑0.11</td></tr></table>
-</div><div class="cat">
-  <div class="cat-h"><span class="nm">三黄鸡</span><span class="tag g">冻品原料</span></div>
+  <div class="cat-h"><span class="nm">三黄鸡（817）</span><span class="tag g">冻品原料</span></div>
   <div class="price"><span class="v">3.59</span><span class="u"> 元/斤</span><span class="chg up">↑</span></div>
-  <svg class="spark" viewBox="0 0 600 52" preserveAspectRatio="none"><path d="M7.0 43.1 L72.1 32.9 L137.2 21.1 L202.3 7.0 L267.4 29.0 L332.6 45.0 L397.7 37.0 L462.8 25.2 L527.9 17.2 L593.0 7.0 L593.0 45.0 L7.0 45.0 Z" fill="#d63b3b" opacity=".10"/><path d="M7.0 43.1 L72.1 32.9 L137.2 21.1 L202.3 7.0 L267.4 29.0 L332.6 45.0 L397.7 37.0 L462.8 25.2 L527.9 17.2 L593.0 7.0" fill="none" stroke="#d63b3b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="7.0" cy="43.1" r="2.6" fill="#d63b3b"/><circle cx="72.1" cy="32.9" r="2.6" fill="#d63b3b"/><circle cx="137.2" cy="21.1" r="2.6" fill="#d63b3b"/><circle cx="202.3" cy="7.0" r="2.6" fill="#d63b3b"/><circle cx="267.4" cy="29.0" r="2.6" fill="#d63b3b"/><circle cx="332.6" cy="45.0" r="2.6" fill="#d63b3b"/><circle cx="397.7" cy="37.0" r="2.6" fill="#d63b3b"/><circle cx="462.8" cy="25.2" r="2.6" fill="#d63b3b"/><circle cx="527.9" cy="17.2" r="2.6" fill="#d63b3b"/><circle cx="593.0" cy="7.0" r="2.6" fill="#d63b3b"/></svg>
-  <div class="plain"><p>三黄鸡的料鸡817今天涨了，3块59分。817 这阵子一直在往上走，跟鸡苗涨、鸡农惜着养都有关系。这是我们三黄鸡冻品最直接的原料，涨了成本就上去、跌了就有空间。</p></div>
+  <div class="fhead">三黄鸡817涨了，3块59分</div>
+  <div class="facs"><div class="fac"><span class="fn">现在什么情况</span><span class="ft">三黄鸡的料鸡817今天涨了，3块59分。</span></div><div class="fac"><span class="fn">为什么</span><span class="ft">817 跟老母鸡不是一回事，走的是另一条线。它主要看两样：一是鸡苗价格（鸡苗贵了养鸡成本高，卖鸡的就顺势要价），二是屠场收鸡的意愿（收得凶价格就硬，收得懒价格就软）。</span></div><div class="fac"><span class="fn">鸡苗那边的情况</span><span class="ft">全国38个地方的鸡苗里，有19个涨了、19个没动，涨的比如青岛、泰安、潍坊。鸡苗涨了就是养鸡成本抬高了，卖鸡的顺势要价，817 就跟着硬。</span></div><div class="fac"><span class="fn">行业那边的说法</span><span class="ft">源站对11/8的看法是「链上赋能，蓄势破防」——屠企慎持收购合同，外运拉动抬头翘尾。</span></div><div class="fac"><span class="fn">明天怎么样</span><span class="ft">明天（11/8）要跌：6 个地方跌、2 个地方持平。跌得最多的是江苏南通，3.95元/斤，比今天掉了0.10。该报价的按新的来，别拿今天的高价去报。</span></div><div class="fac"><span class="fn">源站怎么说</span><span class="ft">源站对明天的说法是「供需博弈，高举高打」。这话听着是看涨的意思，但它列的逐地价格多数在跌——所以以实际报价的数字为准，观点只当参考。</span></div><div class="fac"><span class="fn">跟我们什么关系</span><span class="ft">817 就是我们三黄鸡冻品的原料，它涨成本就上去、跌了就有空间。</span></div></div>
 </div><div class="cat">
   <div class="cat-h"><span class="nm">公鸡</span><span class="tag g">活禽</span></div>
   <div class="price"><span class="v">5.99</span><span class="u"> 元/斤</span><span class="chg flat">→</span></div>
-  <svg class="spark" viewBox="0 0 600 52" preserveAspectRatio="none"><path d="M7.0 45.0 L72.1 45.0 L137.2 45.0 L202.3 45.0 L267.4 45.0 L332.6 45.0 L397.7 45.0 L462.8 45.0 L527.9 45.0 L593.0 45.0 L593.0 45.0 L7.0 45.0 Z" fill="#8a9691" opacity=".10"/><path d="M7.0 45.0 L72.1 45.0 L137.2 45.0 L202.3 45.0 L267.4 45.0 L332.6 45.0 L397.7 45.0 L462.8 45.0 L527.9 45.0 L593.0 45.0" fill="none" stroke="#8a9691" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="7.0" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="72.1" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="137.2" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="202.3" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="267.4" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="332.6" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="397.7" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="462.8" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="527.9" cy="45.0" r="2.6" fill="#8a9691"/><circle cx="593.0" cy="45.0" r="2.6" fill="#8a9691"/></svg>
-  <div class="plain"><p>公鸡今天没动，六个产区平均5块99分。麻鸡公、黄花公这些品种，各地报的价本来就不一样，今天整体还是老样子。各产区最低的4块3毛、最高的9块钱，差得不少。跨区比价的时候记得把运费算进去，光看单价容易比亏。咱们本地菏泽这边：青脚麻公鸡 4.60-4.80 元/斤；大红公鸡 8.00-9.00 元/斤。</p></div>
+  <div class="fhead">公鸡没动，5块99分（六个产区平均）</div>
+  <div class="facs"><div class="fac"><span class="fn">现在什么情况</span><span class="ft">公鸡今天没动，六个产区平均还是5块99分。</span></div><div class="fac"><span class="fn">为什么</span><span class="ft">公鸡走的是第三条线，跟老母鸡、817 都不挨着。它看的是终端需求——饭店、酒席、学校食堂什么时候要货。还有就是麻鸡公、黄花公这些品种本身出栏量有多少。</span></div><div class="fac"><span class="fn">各产区差多少</span><span class="ft">最低4块3毛、最高9块钱，差得不少。麻鸡公和黄花公不是一个价，跨区比价一定先把运费算进去，光看单价容易比亏。</span></div><div class="fac"><span class="fn">咱们菏泽什么价</span><span class="ft">青脚麻公鸡 4.60-4.80 元/斤；大红公鸡 8.00-9.00 元/斤</span></div><div class="fac"><span class="fn">跟我们什么关系</span><span class="ft">公鸡是我们白条鸡、公鸡类冻品的原料。它不动的时候，可以拿它带动别的品一起卖。</span></div></div>
 </div><div class="cat">
   <div class="cat-h"><span class="nm">我们手上还有什么货</span><span class="tag g">接单前看一眼</span></div>
   <table><tr><th>品类</th><th>大概还能卖</th></tr><tr><td>老母鸡</td><td class='n '>19 天</td></tr><tr><td>三黄鸡</td><td class='n '>17 天</td></tr><tr><td>公鸡</td><td class='n '>43 天</td></tr></table>
   <div class="hint" style="margin-top:8px">这几类有 老母鸡 2 个、三黄鸡 2 个、公鸡 1 个 品项已经断了货，跟客户报价前先确认有没有货。</div>
-</div><div class="cat"><div class="cat-h"><span class="nm">今天跟客户怎么说</span></div><div class="acts"><div class="act"><span class="b">报价格</span><span>老母鸡今天没动，价可以按老价报，但蛋价在往上走，后面可能跟涨，先别把价压太低。</span></div><div class="act"><span class="b">跟客户</span><span>鸡蛋在涨这件事要主动跟客户提一句——养鸡的现在不肯卖老母鸡，这是往后涨价的原因，提前讲比事后解释好使。</span></div><div class="act"><span class="b">推三黄鸡</span><span>817 在涨，三黄鸡冻品的成本跟着上，跟客户谈三黄鸡的时候要把这个说清楚，别让对方觉得是乱涨。</span></div><div class="act"><span class="b">推公鸡</span><span>公鸡这边货源不紧，可以多推一推，拿它带动别的品一起卖。</span></div></div></div>
+</div><div class="cat"><div class="cat-h"><span class="nm">今天跟客户怎么说</span></div><div class="acts"><div class="act"><span class="b">报价格</span><span>明天的817已经出来是跌的，三黄鸡的报价按明天的新价走，今天别再往高了报。</span></div><div class="act"><span class="b">推三黄鸡</span><span>817 在涨，三黄鸡冻品的成本跟着上，跟客户谈三黄鸡的时候要把这个说清楚，别让对方觉得是乱涨。</span></div><div class="act"><span class="b">推公鸡</span><span>公鸡这边货源不紧，可以多推一推，拿它带动别的品一起卖。</span></div></div></div>
 
   <div class="news">
     <h3>行业里的事（有空看看）</h3>
@@ -143,7 +175,7 @@
   <div class="src">
     <b>价格从哪来的：</b>博亚和讯（全国各省淘汰鸡、鸡蛋出场价）· 鸡病专业网（817肉杂、各地产区鸡价）· 网易农财宝典（快大类分省价）<br>
     <b>几个说明：</b>老母鸡＝全国19省淘汰鸡出场价的平均数；三黄鸡＝817肉杂棚前价，也就是我们进的原料鸡；公鸡＝六个主产区棚前价的平均数。<br>
-    <b>怎么来的：</b>本地实时抓取。行情每天都在变，报价以实际谈的为准。
+    <b>怎么来的：</b>本地实时抓取，含明日（11/8）已发布价格。行情每天都在变，报价以实际谈的为准。
   </div>
 
   <div class="foot">
@@ -156,7 +188,7 @@
   // 每次打开都强制取最新版本，避免手机用缓存的旧内容
   // （iOS「添加到主屏幕」后对网页缓存比较顽固）
   (function () {
-    var v = "11/07-1794012184";
+    var v = "11/07-1794018294";
     if (v) { document.documentElement.setAttribute("data-build", v); }
   })();
 </script>
