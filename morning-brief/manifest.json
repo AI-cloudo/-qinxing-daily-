@@ -2,7 +2,7 @@
   "name": "禽类上游行情晨报",
   "short_name": "行情日报",
   "description": "老母鸡 · 鸡蛋 · 三黄鸡 · 公鸡，每天早上 8 点前更新",
-  "start_url": "./index.html?sharecode=NTSAMIQXY5",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
