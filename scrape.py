@@ -3095,6 +3095,28 @@ def main():
         new_state["ncb_seed"] = state.get("ncb_seed", NCB_SEEDS[0])
     if "frozen_sd" not in new_state:      # 山东冻品日更基准价，供次日算「较昨日」
         new_state["frozen_sd"] = state.get("frozen_sd", {})
+    # ===== tag 分段去重（2026-11-09 修复）=====
+    # 背景：板块五基础 tag（"数据日期…"）在主文解析成功时才重置；某轮主文抓取失败时
+    # 旧 tag 整体保留，随后 Mysteel/分割品段再次追加 → 线上出现两遍
+    # 「Mysteel 11-06」「分割品日更」。写入前按「|」分段、以段首非日期文字为 key，
+    # 同 key 只保留最后一次出现（其日期最新）。
+    for s in d.get("sections", []):
+        t = s.get("tag", "")
+        if "|" not in t:
+            continue
+        segs = [x.strip() for x in t.split("|") if x.strip()]
+
+        def _key(seg):
+            m = re.search(r"\d", seg)
+            return (seg[:m.start()] if m else seg).strip("　 ・·—-")
+
+        ordered = []                      # noqa: 保留首次出现顺序
+        last_pos = {}
+        for i, seg in enumerate(segs):
+            last_pos[_key(seg)] = i       # 同 key 记录最后一次出现位置
+        kept = [seg for i, seg in enumerate(segs) if last_pos[_key(seg)] == i]
+        s["tag"] = "　|　".join(kept)
+
     with open(os.path.join(HERE, "data.json"), "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
     with open(state_path, "w", encoding="utf-8") as f:
