@@ -1224,20 +1224,23 @@ def _count_dirs(sec):
     return (up, fl, dn)
 
 
-def _flat_verify_gj(times=6):
-    """公鸡卡「连续同值」的源头复核（2026-11-04 用户要求：标黄后必须真跑一遍核查）。
+def _flat_verify_gj(times=5):
+    """公鸡卡「连续同值」的源头复核 v2（2026-11-16 修正误报）。
 
-    复核对象 = 鸡病专业网《M月D日817、麻鸡成鸡、鸡苗价格行情汇总》——
-    它是**每日更新**的全产区汇总稿，同一篇里既有成鸡价（元/斤）也有鸡苗价（元/羽）。
-    判别逻辑：
-      · 连续 N 期成鸡价一字不变、但鸡苗价有变动 → 源站在正常更新，成鸡价属**真实横盘** → 通过
-      · 成鸡价与鸡苗价全部一字不变、各期内容雷同     → 疑为**整篇照抄**（等同停更）→ 不通过
-      · 抓不到/期数不足                              → 复核未完成 → 不通过（但不判故障）
+    v1 缺陷：拿《817、麻鸡成鸡、鸡苗价格行情汇总》里**所有「元/斤」行**当公鸡卡
+    样本比对。实际卡片样本 = 各产区日报中品种名含「公」的行；汇总稿里的
+    「麻鸡成鸡：社会鸡收购…元/斤，稳/落」行一变动（哪怕只是趋势词换了、价格数字
+    没动），v1 就误报"页面未同步"（2026-11-16 实测误报一例）。
+
+    v2 直接对卡片真实样本复核，两步判别：
+      ① 源站活性：全产区汇总稿近 N 期日期有推进（≥2 个不同日期）
+      ② 卡片样本：各产区日报近 N 期「公」行价格逐期比对（与主采集 region_pats 同源）
+         · 全部一致 → 源站每日发新稿、公鸡报价零变动 → 已复核真实横盘 → 通过
+         · 有变动   → 源动了卡片没跟上（疑抓取/解析失败）→ 不通过
     返回 (通过?, 结论文案)
     """
     try:
         arts = {}
-        # 汇总稿一天一篇，栏目页每页 15 条且掺着各产区日报 → 需翻到第 7 页才凑得够 6 期
         for p in ["/lists/192"] + ["/lists/192/%d" % i for i in range(2, 8)]:
             try:
                 h = fetch(BASE + p, timeout=25)
@@ -1246,45 +1249,62 @@ def _flat_verify_gj(times=6):
             for m in re.finditer(r'href="(/view/\d+)"[^>]*>(.*?)</a>', h, re.S):
                 t = re.sub(r"<[^>]+>", "", m.group(2))
                 t = re.sub(r"\s+", "", t)
-                if t and "汇总" in t and "817" in t:
+                if t:
                     arts.setdefault(t, BASE + m.group(1))
-        if len(arts) < 3:
-            return (False, "复核未完成：仅取到 %d 期全产区汇总稿（需 ≥3 期）" % len(arts))
 
         def _key(t):
             m = re.match(r"(\d+)月(\d+)日", t)
             return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
 
-        picked = sorted(arts.items(), key=lambda x: _key(x[0]), reverse=True)[:times]
-        cheng, miao, bodies = [], [], []
-        for t, u in picked:
-            try:
-                ls = text_lines(fetch(u, timeout=25))
-            except Exception:
+        # ① 源站活性：全产区汇总稿（日更）日期是否仍在推进
+        zl = sorted([t for t in arts if "汇总" in t and "817" in t], key=_key, reverse=True)
+        if len(set(zl[:times])) < 2:
+            return (False, "复核未完成：近 %d 期全产区汇总稿日期未推进，疑源站停更"
+                           % min(len(zl), times))
+
+        # ② 卡片样本：各产区日报「公」行逐期比对（价格只比数字，天然排除稳/落等趋势词）
+        region_pats = [
+            (r"鲁西南（菏泽）地区麻鸡", "山东菏泽"),
+            (r"吉林黄花公鸡", "吉林"),
+            (r"西北（陕、甘、宁）地区麻鸡", "西北(陕甘宁)"),
+            (r"江苏（苏州）优公、黄花公鸡", "江苏苏州"),
+            (r"四川地区麻鸡、黄花公", "四川"),
+            (r"山东地区青脚麻鸡", "山东"),
+            (r"皖南地区817", "皖南"),
+            (r"皖北地区817", "皖北"),
+        ]
+        checked, diffs = 0, []
+        for pat, label in region_pats:
+            hits = sorted([(t, u) for t, u in arts.items() if re.search(pat, t)],
+                          key=lambda x: _key(x[0]), reverse=True)[:times]
+            seq = []
+            for t, u in hits:
+                try:
+                    items = parse_region_prices(fetch(u, timeout=25))
+                except Exception:
+                    continue
+                gong = [(n, p) for n, p, _c in items if "公" in n]
+                if gong:
+                    seq.append((_key(t), gong))
+            if len(seq) < 2:
                 continue
-            c = tuple(re.sub(r"\s+", "", l) for l in ls if "元/斤" in l and len(l) < 170)
-            m2 = tuple(re.sub(r"\s+", "", l) for l in ls if "元/羽" in l and len(l) < 170)
-            if not c:
-                continue
-            cheng.append(c)
-            miao.append(m2)
-            bodies.append(tuple(re.sub(r"\s+", "", l) for l in ls if len(l) < 170))
-        n = len(cheng)
-        if n < 3:
-            return (False, "复核未完成：可解析的全产区汇总稿仅 %d 期" % n)
-        if len(set(cheng)) > 1:
-            return (False, "复核发现源站成鸡价已变动，页面未同步（疑抓取或解析失败）")
-        if len(set(miao)) > 1:
-            chg = len(set(miao))
-            return (True, "已复核：近 %d 期全产区汇总稿成鸡价连续持平，但鸡苗价有 %d 种不同取值 "
-                          "→ 源站每日正常更新，成鸡价属真实横盘" % (n, chg))
-        if len(set(bodies)) > 1:
-            return (True, "已复核：近 %d 期成鸡与鸡苗价不变，但正文描述有更新 → 源站仍在更新，"
-                          "成鸡价属真实横盘" % n)
-        return (False, "复核异常：近 %d 期全产区汇总稿成鸡、鸡苗价与正文完全一致，"
-                       "疑为源站整篇照抄（等同停更）" % n)
+            checked += 1
+            for i in range(1, len(seq)):
+                cur = dict(seq[i - 1][1])   # 较新一期
+                prv = dict(seq[i][1])       # 较早一期
+                for n in set(cur) | set(prv):
+                    if cur.get(n) != prv.get(n):
+                        diffs.append("%s %s: %s→%s" % (label, n, prv.get(n), cur.get(n)))
+        if checked < 3:
+            return (False, "复核未完成：仅 %d 个产区日报有连续两期可解析（需 ≥3）" % checked)
+        if diffs:
+            return (False, "复核发现源站公鸡报价已变动（%s%s），页面未同步（疑抓取或解析失败）"
+                           % (diffs[0][:44], "；共 %d 处" % len(diffs) if len(diffs) > 1 else ""))
+        return (True, "已复核：近 %d 期 %d 个产区日报「公」行报价逐期一致，且全产区汇总稿"
+                      "日期正常推进 → 公鸡属真实横盘" % (times, checked))
     except Exception as e:
         return (False, "复核未完成（%s）" % str(e)[:40])
+
 
 
 def _flat_verify_boyar(today):
