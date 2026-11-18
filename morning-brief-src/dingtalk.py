@@ -28,6 +28,40 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CFG = os.path.join(HERE, "dingtalk.json")
 TXT = os.path.join(HERE, "out", "morning_brief.txt")
 SITE_URL = "https://ai-cloudo.github.io/-qinxing-daily-/morning-brief/index.html"
+REPO = "AI-cloudo/-qinxing-daily-"
+WF_FILE = "morning-brief-dingtalk.yml"
+GH_TOKEN_FILE = "/Users/yitouxiaomaolv/WorkBuddy/2026-08-26-10-07-56/workbench/.gh-token"
+
+
+def cloud_pushed_today():
+    """云端 workflow 今天（北京时间）是否已成功跑过并推过钉钉。
+
+    本地推送前调它，防止 6:30 本地和 6:40 云端给群里发两条。
+    只在本地环境用（.gh-token 存在时才查），云端 runner 直接返回 False。
+    """
+    try:
+        token = open(GH_TOKEN_FILE, encoding="utf-8").read().strip()
+        import urllib.request as ur
+        req = ur.Request(
+            "https://api.github.com/repos/%s/actions/workflows/%s/runs?per_page=10"
+            % (REPO, WF_FILE))
+        req.add_header("Authorization", "Bearer " + token)
+        req.add_header("Accept", "application/vnd.github+json")
+        req.add_header("User-Agent", "morning-brief")
+        with ur.urlopen(req, timeout=15) as r:
+            runs = json.loads(r.read().decode()).get("workflow_runs", [])
+    except Exception:
+        return False          # 查不到就按"云端没跑"处理，本地照推，宁多勿缺
+    from datetime import datetime, timezone, timedelta
+    bj = timezone(timedelta(hours=8))
+    today = datetime.now(bj).strftime("%Y-%m-%d")
+    for run in runs:
+        created = datetime.fromisoformat(
+            run["created_at"].replace("Z", "+00:00")).astimezone(bj)
+        if (created.strftime("%Y-%m-%d") == today
+                and run["conclusion"] == "success"):
+            return True
+    return False
 
 
 def load_cfg():
@@ -118,6 +152,9 @@ def main():
     args = sys.argv[1:]
     if not os.path.exists(TXT):
         raise SystemExit("✗ 找不到 %s —— 先跑生成" % TXT)
+    if "--skip-if-cloud-done" in args and cloud_pushed_today():
+        print("云端今天已推送，本地跳过（防重复）")
+        return
     if "--full" in args:
         md = build_full()
     else:
