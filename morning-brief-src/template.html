@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>__TITLE__</title>
+
+<!-- 手机"添加到主屏幕"用：图标 + 名称 + 全屏显示 -->
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="manifest" href="./manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="行情日报">
+<meta name="theme-color" content="#1f6b52">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<!-- 每次打开都取最新，不走缓存 -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<style>
+  :root{
+    --up:#d63b3b; --down:#0f9d5f; --flat:#8a9691;
+    --ink:#1c2622; --sub:#5c6b64; --line:#e3e9e5;
+    --card:#ffffff; --bg:#f4f7f5; --accent:#1f6b52; --accent-soft:#eaf3ee;
+    --warn:#b8860b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    font-size:15px;line-height:1.72;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:640px;margin:0 auto;padding:14px 14px 40px}
+
+  /* 顶部 */
+  .hero{background:linear-gradient(135deg,#1f6b52,#2d8a68);color:#fff;border-radius:16px;padding:18px 18px 16px}
+  .hero .k{font-size:12px;opacity:.85;letter-spacing:.5px}
+  .hero h1{margin:4px 0 2px;font-size:23px;font-weight:700;letter-spacing:-.3px}
+  .hero .meta{font-size:12px;opacity:.9;margin-top:8px;line-height:1.7}
+  .hero .meta b{font-weight:600;opacity:1}
+
+  /* 开头结论 */
+  .verdict{background:#fff;border-radius:14px;padding:15px 17px;margin-top:12px;
+    border-left:4px solid var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .verdict .lb{font-size:12px;color:var(--accent);font-weight:700;letter-spacing:.5px;margin-bottom:6px}
+  .verdict p{margin:0;font-size:15.5px;font-weight:600;line-height:1.78}
+
+  /* 品类卡 */
+  .cat{background:var(--card);border-radius:14px;padding:15px 16px;margin-top:12px;
+    box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .cat-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:2px}
+  .cat-h .nm{font-size:17px;font-weight:700}
+  .tag{font-size:11px;padding:2px 7px;border-radius:20px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .tag.g{background:#f0f2f1;color:var(--sub)}
+  .price{margin:6px 0 2px;display:flex;align-items:baseline;gap:8px}
+  .price .v{font-size:30px;font-weight:800;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+  .price .u{font-size:13px;color:var(--sub)}
+  .chg{font-size:17px;font-weight:700}
+  .up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--flat)}
+
+  /* 走势图 */
+  .spark{width:100%;height:46px;display:block;margin:6px 0 4px}
+
+  /* 大白话段落 —— 核心 */
+  .plain{background:#f7faf8;border-radius:11px;padding:13px 15px;margin-top:10px;
+    border:1px solid #e6efe9}
+  .plain p{margin:0;font-size:15px;line-height:1.85}
+
+  /* 价格关系总览 —— 一眼看懂谁带动谁 */
+  .chain{background:linear-gradient(135deg,#f0f7f3,#f7fbf9);border-radius:14px;
+    padding:14px 16px;margin-top:12px;border:1px solid #dcebe3}
+  .ctitle{font-size:12.5px;font-weight:700;color:var(--accent);margin-bottom:10px;
+    letter-spacing:.3px}
+  .chnode{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    font-size:13px;padding:6px 0;border-bottom:1px dashed rgba(31,107,82,.13)}
+  .chnode:last-child{border-bottom:none}
+  .cfrm{background:var(--accent);color:#fff;border-radius:6px;padding:2px 8px;
+    font-weight:700;font-size:12.5px;white-space:nowrap}
+  .carw{color:var(--accent);font-weight:700}
+  .cto{background:#fff;border:1px solid #cfe3d9;border-radius:6px;padding:2px 8px;
+    font-weight:600;font-size:12.5px;white-space:nowrap}
+  .cstate{font-weight:700;font-variant-numeric:tabular-nums;font-size:13px;
+    color:var(--ink);white-space:nowrap}
+  .cwhy{color:var(--sub);font-size:12.5px;flex:1 1 100%;padding-left:2px;line-height:1.6}
+
+  /* 一句话结论 */
+  .fhead{font-size:14.5px;font-weight:600;line-height:1.75;margin-top:8px;
+    color:#24443a}
+
+  /* 因素分行 —— 每条一个原因，条理清楚 */
+  .facs{margin-top:9px}
+  .fac{display:flex;gap:8px;font-size:14px;line-height:1.8;padding:6px 0;
+    border-top:1px solid #eef3f0;align-items:flex-start}
+  .fac:first-child{border-top:none}
+  .fn{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--accent);
+    background:var(--accent-soft);border-radius:5px;padding:2px 7px;margin-top:3px;
+    max-width:6.6em;white-space:normal;text-align:center;line-height:1.4}
+  .ft{flex:1;color:#2a3a33}
+
+  /* 表格 */
+  .tbl-title{font-size:12px;color:var(--sub);margin-top:12px;font-weight:600}
+  table{width:100%;border-collapse:collapse;margin-top:7px;font-size:13.5px}
+  th,td{padding:7px 4px;text-align:left;border-bottom:1px solid var(--line)}
+  th{font-size:11.5px;color:var(--sub);font-weight:600}
+  td.n{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+
+  /* 建议 */
+  .acts{margin-top:4px}
+  .act{display:flex;gap:9px;font-size:14.5px;line-height:1.8;margin-bottom:9px;align-items:flex-start}
+  .act .b{flex:0 0 auto;font-weight:700;color:#fff;background:var(--accent);
+    border-radius:6px;padding:1px 8px;font-size:12.5px;margin-top:4px;white-space:nowrap}
+
+  .hint{font-size:13px;color:var(--sub);margin-top:8px;line-height:1.75}
+
+  /* 资讯 */
+  .news{background:#fff;border-radius:14px;padding:14px 16px;margin-top:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .news h3{margin:0 0 8px;font-size:14.5px;font-weight:700}
+  .news a{display:block;color:var(--ink);text-decoration:none;font-size:13.5px;padding:7px 0;
+    border-bottom:1px solid var(--line);line-height:1.6}
+  .news a:last-child{border-bottom:none}
+  .news a span{color:var(--sub);font-size:11.5px;margin-left:6px}
+
+  .foot{margin-top:16px;font-size:11.5px;color:var(--sub);text-align:center;line-height:1.85}
+  .src{background:#fff;border-radius:12px;padding:12px 14px;margin-top:12px;font-size:12px;color:var(--sub);line-height:1.85;
+    box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .src b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="k">上游行情 · 每天早上 8 点前送到</div>
+    <h1>__TITLE__</h1>
+    <div class="meta">数据日期 <b>__BOARD_DATE__</b> ｜ 更新于 <b>__GEN_TIME__</b><br>
+      老母鸡 · 鸡蛋 · 三黄鸡 · 公鸡　价格和原因都在下面</div>
+  </div>
+
+  <div class="verdict">
+    <div class="lb">先看这里</div>
+    <p>__VERDICT__</p>
+  </div>
+
+  __CATEGORIES__
+
+  <div class="news">
+    <h3>行业里的事（有空看看）</h3>
+    __NEWS__
+  </div>
+
+  <div class="src">
+    <b>价格从哪来的：</b>博亚和讯（全国各省淘汰鸡、鸡蛋出场价）· 鸡病专业网（817肉杂、各地产区鸡价）· 网易农财宝典（快大类分省价）<br>
+    <b>几个说明：</b>老母鸡＝全国19省淘汰鸡出场价的平均数；三黄鸡＝817肉杂棚前价，也就是我们进的原料鸡；公鸡＝六个主产区棚前价的平均数。<br>
+    <b>怎么来的：</b>__SOURCE_DESC__。行情每天都在变，报价以实际谈的为准。
+  </div>
+
+  <div class="foot">
+    __HEALTH_NOTE__<br>
+    WorkBuddy 自动生成，每天早上自动更新到最新行情。
+  </div>
+
+</div>
+<script>
+  // 每次打开都强制取最新版本，避免手机用缓存的旧内容
+  // （iOS「添加到主屏幕」后对网页缓存比较顽固）
+  (function () {
+    var v = "__BUILD_VERSION__";
+    if (v) { document.documentElement.setAttribute("data-build", v); }
+  })();
+</script>
+</body>
+</html>
