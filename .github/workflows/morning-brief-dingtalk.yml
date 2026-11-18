@@ -1,0 +1,45 @@
+name: morning-brief dingtalk push
+
+# 免费云端晨报：生成 + 推钉钉群，不依赖任何一台电脑开着机。
+# 本地 LaunchAgent（6:30/6:55）仍在，两边内容一致、互为备份；
+# 钉钉机器人每分钟最多 20 条，两边都跑也不会刷屏（内容幂等，重复推一次无妨）。
+
+on:
+  schedule:
+    - cron: "35 22 * * *"   # UTC 22:35 = 北京时间 06:40
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 生成晨报
+        working-directory: morning-brief-src
+        run: bash run_morning_brief.sh
+
+      - name: 推送钉钉群（精简版）
+        working-directory: morning-brief-src
+        env:
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+        run: python3 dingtalk.py --short
+
+      - name: 保留产物以便排查
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: morning-brief-output
+          path: |
+            morning-brief-src/out/morning_brief.txt
+            morning-brief-src/out/run.log
+          retention-days: 7
