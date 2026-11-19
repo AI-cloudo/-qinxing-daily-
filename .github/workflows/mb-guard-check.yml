@@ -1,0 +1,22 @@
+name: mb guard check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 检查守卫
+        working-directory: morning-brief-src
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "--- 检出文件内容 ---"
+          cat pushed.json || echo "(无 pushed.json)"
+          echo "--- 守卫判断 ---"
+          python3 dingtalk.py --status
