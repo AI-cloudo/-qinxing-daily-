@@ -203,12 +203,12 @@ def build_short():
 
 def main():
     args = sys.argv[1:]
-    if not os.path.exists(TXT):
-        raise SystemExit("✗ 找不到 %s —— 先跑生成" % TXT)
     if "--status" in args:
         print("今天（%s）已推过？%s" % (_today_bj(),
                                     "是" if already_pushed() else "否"))
         return
+    if not os.path.exists(TXT):
+        raise SystemExit("✗ 找不到 %s —— 先跑生成" % TXT)
     # 一天只推一条：所有通道共用仓库里的标记
     if "--force" not in args and already_pushed():
         print("今天已推过，跳过（一天只发一条）")
