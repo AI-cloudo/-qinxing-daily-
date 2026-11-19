@@ -31,37 +31,90 @@ SITE_URL = "https://ai-cloudo.github.io/-qinxing-daily-/morning-brief/index.html
 REPO = "AI-cloudo/-qinxing-daily-"
 WF_FILE = "morning-brief-dingtalk.yml"
 GH_TOKEN_FILE = "/Users/yitouxiaomaolv/WorkBuddy/2026-08-26-10-07-56/workbench/.gh-token"
+PUSHED_PATH = "morning-brief-src/pushed.json"
 
 
-def cloud_pushed_today():
-    """云端 workflow 今天（北京时间）是否已成功跑过并推过钉钉。
-
-    本地推送前调它，防止 6:30 本地和 6:40 云端给群里发两条。
-    只在本地环境用（.gh-token 存在时才查），云端 runner 直接返回 False。
-    """
+def _gh_token():
+    """云的 runner 用 GITHUB_TOKEN，本机用长期的 .gh-token。"""
+    t = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if t:
+        return t.strip()
     try:
-        token = open(GH_TOKEN_FILE, encoding="utf-8").read().strip()
-        import urllib.request as ur
-        req = ur.Request(
-            "https://api.github.com/repos/%s/actions/workflows/%s/runs?per_page=10"
-            % (REPO, WF_FILE))
-        req.add_header("Authorization", "Bearer " + token)
-        req.add_header("Accept", "application/vnd.github+json")
-        req.add_header("User-Agent", "morning-brief")
-        with ur.urlopen(req, timeout=15) as r:
-            runs = json.loads(r.read().decode()).get("workflow_runs", [])
+        return open(GH_TOKEN_FILE, encoding="utf-8").read().strip()
     except Exception:
-        return False          # 查不到就按"云端没跑"处理，本地照推，宁多勿缺
+        return ""
+
+
+def _api(path, method="GET", body=None):
+    import urllib.request as ur
+    req = ur.Request("https://api.github.com/repos/%s/%s" % (REPO, path),
+                     data=json.dumps(body).encode() if body is not None else None,
+                     method=method)
+    req.add_header("Authorization", "Bearer " + _gh_token())
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("User-Agent", "morning-brief")
+    with ur.urlopen(req, timeout=20) as r:
+        return json.loads(r.read().decode())
+
+
+def _today_bj():
     from datetime import datetime, timezone, timedelta
-    bj = timezone(timedelta(hours=8))
-    today = datetime.now(bj).strftime("%Y-%m-%d")
-    for run in runs:
-        created = datetime.fromisoformat(
-            run["created_at"].replace("Z", "+00:00")).astimezone(bj)
-        if (created.strftime("%Y-%m-%d") == today
-                and run["conclusion"] == "success"):
-            return True
-    return False
+    return datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+
+
+def already_pushed():
+    """今天（北京时间）是否已经推过 —— 所有通道共用这一个标记。
+
+    标记是仓库里的 morning-brief-src/pushed.json：
+      1) 先读本地检出的文件 —— 云端 Actions 的 checkout 里就有，不依赖网络；
+      2) 读不到再走 API —— 本机没有那个文件，用 token 读远端。
+    四路通道（LaunchAgent 主跑/补跑、WorkBuddy 自动化、云端 Actions）
+    谁先跑谁推，后来的一律跳过。
+    """
+    today = _today_bj()
+    # ① 本地检出文件（云端 runner 走这条，最可靠）
+    for p in (os.path.join(HERE, "pushed.json"),
+              os.path.join(HERE, "..", "morning-brief-src", "pushed.json")):
+        try:
+            if os.path.exists(p):
+                d = json.load(open(p, encoding="utf-8"))
+                if d.get("date") == today:
+                    return True
+        except Exception:
+            pass
+    # ② 远端 API（本机走这条）
+    try:
+        import base64
+        j = _api("contents/" + PUSHED_PATH)
+        data = json.loads(base64.b64decode(j["content"]).decode())
+        return data.get("date") == today
+    except Exception as e:
+        print("[guard] 读远端标记失败（按未推处理）：%r" % e)
+        return False
+
+
+def mark_pushed(by=""):
+    """推成功后写入今天的标记，防止同一天再发一条。"""
+    try:
+        import base64
+        from datetime import datetime, timezone, timedelta
+        at = datetime.now(timezone(timedelta(hours=8))).strftime("%H:%M:%S")
+        payload = json.dumps({"date": _today_bj(), "at": at,
+                              "by": by or "unknown"}, ensure_ascii=False)
+        body = {"message": "chore: mark dingtalk pushed %s" % _today_bj(),
+                "content": base64.b64encode(payload.encode()).decode(),
+                "branch": "main"}
+        try:
+            cur = _api("contents/" + PUSHED_PATH)
+            if cur.get("sha"):
+                body["sha"] = cur["sha"]
+        except Exception:
+            pass
+        _api("contents/" + PUSHED_PATH, "PUT", body)
+        return True
+    except Exception as e:
+        print("[warn] 写入已推标记失败（不影响已发出的消息）：%s" % e)
+        return False
 
 
 def load_cfg():
@@ -152,8 +205,13 @@ def main():
     args = sys.argv[1:]
     if not os.path.exists(TXT):
         raise SystemExit("✗ 找不到 %s —— 先跑生成" % TXT)
-    if "--skip-if-cloud-done" in args and cloud_pushed_today():
-        print("云端今天已推送，本地跳过（防重复）")
+    if "--status" in args:
+        print("今天（%s）已推过？%s" % (_today_bj(),
+                                    "是" if already_pushed() else "否"))
+        return
+    # 一天只推一条：所有通道共用仓库里的标记
+    if "--force" not in args and already_pushed():
+        print("今天已推过，跳过（一天只发一条）")
         return
     if "--full" in args:
         md = build_full()
@@ -165,6 +223,8 @@ def main():
               "当日上游行情会自动发到这个群。")
     ok, msg = send(cfg, md)
     print(msg)
+    if ok:
+        mark_pushed(os.environ.get("PUSHED_BY", "local"))
     sys.exit(0 if ok else 1)
 
 
