@@ -1,11 +1,20 @@
 name: morning-brief dingtalk push
 
-# 免费云端晨报：生成 + 推钉钉群，不依赖任何一台电脑开着机。
+# 免费云端晨报：生成 + 发布网页 + 推钉钉群，不依赖任何一台电脑开着机。
 # 时间：每天北京时间 08:20 推送。GitHub 定时任务本身会延迟几分钟，
 # 所以 08:05（UTC 00:05）就开始跑，先算好等待时间，到 08:20:00 再发，
 # 保证群里看到的时间就是 8 点 20。
 # 防重复：dingtalk.py 会用仓库 morning-brief-src/pushed.json 做「一天只推一条」，
 # 本机 LaunchAgent、WorkBuddy 自动化、云端三路共用这个标记。
+#
+# 2026-11-20 新增：生成后直接在本 workflow 内发布 GitHub Pages。
+# 背景：此前网页只靠本机 LaunchAgent（com.workbuddy.morning-brief）推送，
+# 电脑关机时网页停更，钉钉消息里的链接点开还是旧行情。
+# 现在网页和钉钉消息共用云端生成的同一份产物：
+#   08:05 云端生成 → 立即发布网页 → 08:20 整推钉钉群。
+# 本机 LaunchAgent 降级为备份通道（电脑开着时会更早更新一次网页）。
+# 注意：这里不能用 git commit 触发发布工作流（GITHUB_TOKEN 的提交
+# 不会触发其他 workflow），所以直接在本 workflow 里走 deploy-pages。
 
 on:
   schedule:
@@ -14,11 +23,21 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+# 与 daily.yml、publish-morning-brief.yml 串行发布，避免互相覆盖 Pages
+concurrency:
+  group: pages-publish
+  cancel-in-progress: false
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,6 +48,33 @@ jobs:
       - name: 生成晨报
         working-directory: morning-brief-src
         run: bash run_morning_brief.sh
+
+      - name: 把生成的晨报网页放进站点目录
+        run: |
+          if [ ! -f morning-brief-src/site/index.html ]; then
+            echo "site/index.html 未生成，网页保持仓库原有版本"
+          else
+            mkdir -p morning-brief
+            for f in index.html manifest.json icon-180.png icon-192.png icon-512.png; do
+              if [ -f "morning-brief-src/site/$f" ]; then
+                cp "morning-brief-src/site/$f" "morning-brief/$f"
+              fi
+            done
+            echo "已就位："
+            ls -l morning-brief/index.html
+          fi
+
+      - name: 配置 GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: 上传页面
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: 发布到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
       - name: 等到 08:20（北京时间）再发
         run: |
