@@ -412,6 +412,7 @@ def collect(d):
     gj_lo = gj_hi = None
     gj_avg = None
     gj_cnt = {}          # 当日涨跌家数（口径同速览卡 note 的「N涨/N平/N跌」）
+    gj_dates = []        # 公鸡样本行各自的数据日期（源站各产区发稿有先后）
     if gj_sec and gj_sec.get("tables"):
         pv = []
         for r in gj_sec["tables"][0].get("rows", []):
@@ -429,23 +430,32 @@ def collect(d):
             if nums:
                 pv.append(sum(nums) / len(nums))   # 取中值，跟速览卡一致
                 gj_cnt[row_dir(r, 3)] = gj_cnt.get(row_dir(r, 3), 0) + 1
+                dm = re.search(r"(\d+)/(\d+)", dtag)
+                if dm:
+                    gj_dates.append("%s/%s" % (dm.group(1), dm.group(2)))
         if pv:
             gj_lo = min(pv)
             gj_hi = max(pv)
             gj_avg = round(sum(pv) / len(pv), 2)
     out["gj_lo"], out["gj_hi"], out["gj_avg"] = gj_lo, gj_hi, gj_avg
     out["gj_cnt"] = gj_cnt
+    out["gj_dates"] = sorted(set(gj_dates))
 
-    # 菏泽本地价
+    # 菏泽本地价（菏泽的报价常比其他产区晚一天发稿，日期单独记）
     heze = []
+    heze_date = ""
     if gj_sec and gj_sec.get("tables"):
         for r in gj_sec["tables"][0].get("rows", []):
             try:
                 if "菏泽" in str(r[0]):
                     heze.append("%s %s 元/斤" % (r[1], r[2]))
+                    dm = re.search(r"(\d+)/(\d+)", str(r[4]) if len(r) > 4 else "")
+                    if dm and not heze_date:
+                        heze_date = "%s/%s" % (dm.group(1), dm.group(2))
             except (IndexError, TypeError):
                 continue
     out["heze"] = "；".join(heze) if heze else None
+    out["heze_date"] = heze_date
 
     # 补库货盘（只保留销售关心的：能卖几天、哪些缺货）
     rep = d.get("replenish")
@@ -476,7 +486,8 @@ def render_chain(c):
         num(old.get("price")) if old else None, old.get("dir") if old else "flat",
         num(sh.get("price")) if sh else None, sh.get("dir") if sh else "flat",
         num(gj.get("price")) if gj else None, gj.get("dir") if gj else "flat",
-        next_day=c.get("next_day"), ctx=c.get("ctx"))
+        next_day=c.get("next_day"), ctx=c.get("ctx"),
+        chick_egg=c.get("chick_egg"))
     rows = []
     for it in items:
         rows.append(
@@ -586,7 +597,8 @@ def render_actions(c):
         old.get("dir") if old else "flat",
         sh.get("dir") if sh else "flat",
         gj.get("dir") if gj else "flat",
-        gj_days=gj_days, next_day=c.get("next_day"))
+        gj_days=gj_days, next_day=c.get("next_day"),
+        chick_egg=c.get("chick_egg"))
     if not acts:
         return ""
     out = ['<div class="cat"><div class="cat-h"><span class="nm">今天跟客户怎么说</span>'
@@ -694,7 +706,8 @@ def build():
         gj_c.get("dir") if gj_c else "flat",
         lo=c.get("gj_lo"), hi=c.get("gj_hi"), heze=c.get("heze"),
         flat_days=flat_periods(series_of(gj_c)), cnt=c.get("gj_cnt"),
-        ctx=c.get("ctx"))
+        ctx=c.get("ctx"), dates=c.get("gj_dates"),
+        heze_date=c.get("heze_date"))
     if gj_block:
         parts.append(safe(render_factors, "公鸡", "活禽", gj_block["head"],
                           gj_block["factors"],
@@ -792,7 +805,7 @@ def build():
             sh_c.get("dir") if sh_c else "flat",
             gj_c.get("dir") if gj_c else "flat",
             gj_days=((c.get("stock") or {}).get("mains") or {}).get("公鸡", {}).get("days"),
-            next_day=c.get("next_day")):
+            next_day=c.get("next_day"), chick_egg=c.get("chick_egg")):
         txt.append("  【%s】%s" % (tag, t))
     txt.append("")
     txt.append(hn)
