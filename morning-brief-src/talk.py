@@ -276,13 +276,67 @@ def _counts_txt(ups, downs, flats):
     return "、".join(bits) if bits else "全是持平"
 
 
+def _ratio_phrase(n, total, word="涨"):
+    """「跌的省占了八成」—— 占比必须按实际家数说。
+
+    2026-11-19 修：原来「涨/跌的省快一半」是写死的。
+    11/19 鸡蛋 20 个主产省里 16 个在跌（八成），正文却说「跌的省快一半」，
+    销售念给客户听，客户一比就穿帮（跟 11-17「同一页两套口径」同一类病）。
+    """
+    try:
+        n = float(n or 0)
+        total = float(total or 0)
+    except (TypeError, ValueError):
+        return ""
+    if not total or not n:
+        return ""
+    r = n / total
+    if r >= 0.75:
+        return "%s的省占了八成" % word
+    if r >= 0.62:
+        return "%s的省占了七成" % word
+    if r >= 0.5:
+        return "%s的省过半" % word
+    return "%s的省快一半" % word
+
+
 def _mover_sentence(movers, verb="跌"):
-    """「广东跌4分、江苏跌1毛」—— 涨跌要把金额说清楚，光说家数没用。"""
+    """「广东跌4分、江苏跌1毛」—— 涨跌要把金额说清楚，光说家数没用。
+
+    2026-11-19 修：有些表的涨跌列只给箭头、不给金额（博亚分省出场价表就是），
+    这时 _fen(0) 会拼出「陕西省涨没动」——涨和没动自相矛盾，销售念出来客户当场问穿。
+    拿不到金额就不报金额，只说省名和方向。
+    """
     segs = []
     for m in (movers or [])[:3]:
         name, d, a = m[0], m[1], m[2]
-        segs.append("%s%s%s" % (name, verb if d == "down" else "涨", _fen(a)))
+        v = verb if d == "down" else "涨"
+        try:
+            amt = float(a)
+        except (TypeError, ValueError):
+            amt = 0.0
+        if abs(amt) < 0.001:
+            segs.append("%s%s" % (name, v))     # 金额未知：只说方向，不编「没动」
+        else:
+            segs.append("%s%s%s" % (name, v, _fen(amt)))
     return "、".join(segs)
+
+
+def _prov_mover_txt(movers):
+    """分省涨跌明细（老母鸡用）。
+
+    博亚和讯分省出场价表的涨跌列只给箭头（↑↓→），不给金额 ——
+    金额在速览卡的 note 上（例：领涨 河北/陕西+0.10）。
+    所以这里只报省名和方向，绝不拼成「陕西省涨没动」这种自相矛盾的话（11-19 修）。
+    """
+    ups = [str(m[0]) for m in (movers or []) if m[1] == "up"]
+    downs = [str(m[0]) for m in (movers or []) if m[1] == "down"]
+    bits = []
+    if ups:
+        bits.append("涨的是" + "、".join(ups[:3]))
+    if downs:
+        bits.append("跌的是" + "、".join(downs[:3]))
+    return "，".join(bits)
 
 
 def _egg_counts(up_n, down_n, flat_n, mv_d, mv_u):
@@ -447,14 +501,16 @@ def egg_factors(egg_avg, egg_dir, stat=None, ctx=None):
     if egg_dir == "up":
         seg = "%s鸡蛋整体在涨，全国平均%s%s" % (pfx, e, dm)
         if total:
-            seg += "——%d个主产省里%s，涨的省快一半，这是整体往上" % (
-                total, _egg_counts(up_n, down_n, flat_n, mv_d, mv_u))
+            seg += "——%d个主产省里%s，%s，这是整体往上" % (
+                total, _egg_counts(up_n, down_n, flat_n, mv_d, mv_u),
+                _ratio_phrase(up_n, total, "涨"))
         f.append(("现在什么情况", seg + "。"))
     elif egg_dir == "down":
         seg = "%s鸡蛋整体在跌，全国平均%s%s" % (pfx, e, dm)
         if total:
-            seg += "——%d个主产省里%s，跌的省快一半，这是整体往下" % (
-                total, _egg_counts(up_n, down_n, flat_n, mv_d, mv_u))
+            seg += "——%d个主产省里%s，%s，这是整体往下" % (
+                total, _egg_counts(up_n, down_n, flat_n, mv_d, mv_u),
+                _ratio_phrase(down_n, total, "跌"))
         f.append(("现在什么情况", seg + "。"))
     else:
         seg = "%s鸡蛋整体没动，全国平均%s%s" % (pfx, e, dm)
@@ -530,15 +586,20 @@ def oldhen_factors(price, dir_, egg_avg, egg_dir, flat_days=None, prov=None, ctx
             rng = ""
             if pv.get("lo") and pv.get("hi"):
                 rng = "，各省%s到%s" % (_yuan(pv["lo"]), _yuan(pv["hi"]))
-            movers = pv.get("up", 0) + pv.get("down", 0)
-            mv_txt = _mover_sentence(pv.get("movers"), "跌")
+            up_n = pv.get("up", 0) or 0
+            dn_n = pv.get("down", 0) or 0
+            movers = up_n + dn_n
             if movers:
-                cnt_txt = ("%d个涨、%d个跌" % (pv.get("up", 0), pv.get("down", 0))
-                           if pv.get("up") and pv.get("down")
-                           else "%d个%s" % (movers, "涨" if pv.get("up") else "跌"))
-                seg += "，%d个省里%s%s%s" % (
-                    pv["total"], cnt_txt,
-                    "（%s）" % mv_txt if mv_txt else "", rng)
+                if up_n and dn_n:
+                    cnt_txt = "%d个涨、%d个跌" % (up_n, dn_n)
+                else:
+                    cnt_txt = "%d个%s" % (movers, "涨" if up_n else "跌")
+                # 博亚分省表的涨跌列只有箭头、没有金额（金额在速览卡 note 上），
+                # 所以这里只报省名和方向 —— 绝不能拼成「陕西省涨没动」
+                # 这种自相矛盾的话（11-19 修）。
+                mv_txt = _prov_mover_txt(pv.get("movers"))
+                seg += "，%d个省里%s（%s）%s" % (
+                    pv["total"], cnt_txt, mv_txt, rng)
             else:
                 seg += "，%d个省全是持平%s" % (pv["total"], rng)
         if fd >= 3:
@@ -694,8 +755,12 @@ def sanhuang_factors(price, dir_, next_day=None, chick_egg=None,
                      "多半是收鸡的收得急、货不够卖。苗要是不跟着涨，"
                      "成本撑不住，这涨就得打个问号。" % (ck_when, chick_txt or "苗价没新价")))
         else:
-            f.append(("为什么涨", "苗价反而在跌（%s%s），成本这头撑不住，"
-                     "这涨别当趋势，报价留点余地。" % (ck_when, chick_txt)))
+            # 2026-11-19 修：这是上游行情段，只讲行情，不掺报价动作
+            #（「报价留点余地」是采购决策类的话，销售动作段讲就行，11-19 修）。
+            # 顺带去掉括号套括号（「苗价反而在跌（明天（11/20）…）」读着绕）。
+            f.append(("为什么涨", "苗价反而在跌——%s%s。成本这头撑不住，"
+                     "这涨多半撑不了几天，别当成趋势。"
+                     % (ck_when, chick_txt)))
     elif dir_ == "down":
         if cb == "down":
             f.append(("为什么跌", "苗和毛鸡两头一起往下：苗价在跌（%s%s），"
@@ -832,16 +897,25 @@ def sanhuang_factors(price, dir_, next_day=None, chick_egg=None,
 #  公鸡
 # ══════════════════════════════════════════════════════════════════
 def gongji_factors(price, dir_, lo=None, hi=None, heze=None,
-                   flat_days=None, cnt=None, ctx=None):
+                   flat_days=None, cnt=None, ctx=None, dates=None,
+                   heze_date=None):
     """公鸡：为什么涨、为什么跌。横盘久了换说法，不每天复读。
 
     cnt：当日产区涨跌家数（口径同速览卡 note 的「N涨/N平/N跌」）。
+    dates：公鸡样本行各自的数据日期。源站各产区发稿有先后（菏泽常慢一天），
+           混着两天的时候不能说「今天都没动」——11-20 修。
     """
     if price is None:
         return None
     p = _yuan(price)
     f = []
     pfx = _pfx(ctx, "公鸡")
+    # 样本日期不一致时（部分产区还没发当日稿），时间词要收着说，
+    # 具体哪天写在后面，不能一口咬定「今天」。
+    dts = sorted(set(dates or []))
+    mixed = len(dts) > 1
+    all_today = (not mixed) and dts and _is_today(ctx, "公鸡")
+    pfx_cnt = pfx if (not mixed and not dts) else ("今天" if all_today else "")
     dm = _dmark(ctx, "公鸡")
     fd = flat_days or 0
     ct = cnt or {}
@@ -853,7 +927,13 @@ def gongji_factors(price, dir_, lo=None, hi=None, heze=None,
         if n_moved == 0 and ct:
             # 时间词要跟数据日期走：不是当天的报价，说成「今天」就跟客户对不上
             #（源站没发当日稿时容易犯，11-18 修）。日期已经由 _dmark 挂在价后面。
-            seg += "，%d个产区报价%s一个都没动" % (n_total, pfx)
+            # 11-20 修：6 个产区的报价可能横跨两天（菏泽常慢一天），
+            # 这时不能说「今天都没动」，要把最旧那期单独点出来。
+            if mixed:
+                seg += "，%d个产区报价一个都没动" % n_total
+                seg += "（最旧的一期是%s）" % dts[0]
+            else:
+                seg += "，%d个产区报价%s一个都没动" % (n_total, pfx_cnt)
         elif n_moved:
             seg += "，%d个产区里%d个在动" % (n_total, n_moved)
         if fd >= 3:
@@ -898,7 +978,12 @@ def gongji_factors(price, dir_, lo=None, hi=None, heze=None,
                                     % (_yuan(lo), _yuan(hi))))
 
     if heze:
-        f.append(("菏泽价", heze))
+        # 11-20 修：菏泽的报价常常比别家晚一天发稿，
+        # 不标日期的话，销售会把昨天的价当今天的报给菏泽客户。
+        heze_txt = heze
+        if heze_date:
+            heze_txt += "（%s）" % heze_date
+        f.append(("菏泽价", heze_txt))
 
     f.append(("跟我们", "公鸡是我们白条鸡、公鸡类冻品的原料。"
                               "它不动的时候，可以拿它带动别的品一起卖。"))
@@ -911,7 +996,8 @@ def gongji_factors(price, dir_, lo=None, hi=None, heze=None,
 #  价格关系总览 —— 一眼看出谁牵动谁
 # ══════════════════════════════════════════════════════════════════
 def chain_overview(egg_avg, egg_dir, old_price, old_dir,
-                   sh_price, sh_dir, gj_price, gj_dir, next_day=None, ctx=None):
+                   sh_price, sh_dir, gj_price, gj_dir, next_day=None, ctx=None,
+                   chick_egg=None):
     """用箭头串起来，销售一眼就能看懂"为什么这几个价会一起动"。"""
     e = _yuan(egg_avg) if egg_avg is not None else "—"
     o = _yuan(old_price) if old_price is not None else "—"
@@ -921,8 +1007,30 @@ def chain_overview(egg_avg, egg_dir, old_price, old_dir,
     d_sh = _dmark(ctx, "三黄鸡")
     d_gj = _dmark(ctx, "公鸡")
 
-
-    sh_why = "鸡苗贵→养鸡成本高→卖鸡的要价硬"
+    # 817 这条链的因果方向必须跟正文「为什么涨/为什么跌」一致。
+    # 2026-11-20 修：原来这里写死「鸡苗贵→养鸡成本高→卖鸡的要价硬」，
+    # 可当天 817 是跌的、正文也明说「苗价在跌」——
+    # 同一页上半截说苗贵、下半截说苗跌，销售念哪边都跟另一边打架。
+    # 现在按 817 方向 + 鸡苗方向选说法，跟正文同一条线。
+    ce = (chick_egg or {}).get("rows") or []
+    _c_down, _c_up, _c_flat = _split_chg(ce)
+    cb = _bias(_c_up, _c_down, _c_flat)          # 鸡苗方向，跟正文同一套判定
+    if sh_dir == "down":
+        if cb == "down":
+            sh_why = "苗价在跌→养鸡的不敢进苗；收鸡的压价→卖鸡的只能让价"
+        elif cb == "up":
+            sh_why = "苗价还贵→成本顶着，这跌是把涨快的吐回来"
+        else:
+            sh_why = "苗价没动→这跌不是苗价推的，是收鸡的在压价"
+    elif sh_dir == "up":
+        if cb == "up":
+            sh_why = "鸡苗贵→养鸡成本高→卖鸡的要价硬"
+        elif cb == "down":
+            sh_why = "苗价在跌→成本撑不住，这涨多半撑不了几天"
+        else:
+            sh_why = "这涨不是苗价推的→收鸡的收得急、货不够卖"
+    else:
+        sh_why = "鸡苗贵→养鸡成本高→卖鸡的要价硬"
     nd = next_day or {}
     if nd.get("rows"):
         d_down, d_up, d_flat = _split_chg(nd.get("rows"))
@@ -934,9 +1042,17 @@ def chain_overview(egg_avg, egg_dir, old_price, old_dir,
         else:
             sh_why += "；明天基本持平"
 
+    # 鸡蛋→老母鸡 这条链也要跟箭头方向一致（蛋跌了就该说蛋跌了）
+    if egg_dir == "down":
+        egg_why = "蛋价跌→养鸡的急着卖老母鸡换钱→鸡多起来→鸡价跟着松"
+    elif egg_dir == "up":
+        egg_why = "蛋涨价→养鸡的想留着鸡下蛋→卖的老母鸡少→鸡价涨"
+    else:
+        egg_why = "蛋价涨→养鸡的留着鸡下蛋→鸡价涨；蛋价跌→鸡价跟着松"
+
     return [
         {"from": "鸡蛋", "to": "老母鸡",
-         "why": "蛋涨价→养鸡的想留着鸡下蛋→卖的老母鸡少→鸡价涨",
+         "why": egg_why,
          "state": "%s%s %s" % (e, d_egg, _arrow(egg_dir))},
         {"from": "鸡苗·收鸡", "to": "三黄鸡817",
          "why": sh_why,
@@ -1022,17 +1138,25 @@ def verdict(egg_avg, egg_dir, old_p, old_dir, sh_p, sh_dir,
 #  销售动作 —— 只讲对外沟通和报价节奏
 # ══════════════════════════════════════════════════════════════════
 def today_action(egg_avg, egg_dir, old_dir, sh_dir, gj_dir,
-                 gj_days=None, next_day=None):
+                 gj_days=None, next_day=None, chick_egg=None):
     """给销售的动作建议。
 
     必须和正文一致：817 明天要跌，就不能同时说"817在涨、按涨价谈"。
     这是 11-07 发现的硬伤。
+
+    2026-11-19 修：正文「为什么涨」已经会根据鸡苗方向说话
+    （苗价在跌 → "成本撑不住、别当趋势"），销售动作段必须跟着走同一条线，
+    否则同一页上「成本跟着上」和「成本撑不住」两句直接打架（11-19 修）。
     """
     out = []
     nd = next_day or {}
     d_down, d_up, d_flat = _split_chg(nd.get("rows"))
     # 明天是不是真要跌：按占优判定，2 涨 22 平这种不能算「要跌」
     sh_turn_down = _bias(d_up, d_down, d_flat) == "down"
+    # 鸡苗自身方向（跟正文「为什么涨」用的是同一份数据、同一套判定）
+    ce = (chick_egg or {}).get("rows") or []
+    c_downs, c_ups, c_flats = _split_chg(ce)
+    chick_dir = _bias(c_ups, c_downs, c_flats)
 
     # 报价格
     if sh_turn_down:
@@ -1059,6 +1183,11 @@ def today_action(egg_avg, egg_dir, old_dir, sh_dir, gj_dir,
     if sh_turn_down:
         out.append(("谈三黄鸡", "817涨了几天，明天开始跌。跟客户别当涨价谈，"
                                "可以拿这个说'原料已经在回落'，把单子定下来。"))
+    elif sh_dir == "up" and chick_dir == "down":
+        # 苗价在跌 → 跟正文「成本撑不住、这涨别当趋势」保持一条线（11-19 修）
+        out.append(("谈三黄鸡", "817这两天在涨，但鸡苗在往下跌，成本这头撑不住，"
+                               "这个涨多半撑不了几天。跟客户把原因讲清楚，"
+                               "别让人以为是乱涨。"))
     elif sh_dir == "up":
         out.append(("谈三黄鸡", "817在涨，三黄鸡成本跟着上。"
                                "谈的时候把原因讲清楚，别让对方以为是乱涨。"))
