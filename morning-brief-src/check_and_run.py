@@ -51,6 +51,117 @@ def already_done_today():
     return False
 
 
+def _dkey(s):
+    """'11/21' → (11, 21)，用于比较大小。
+
+    为什么不能直接比字符串（2026-11-21 修）：
+      "11/21" > "11/9" 是 False（按字符比，'2' < '9'），
+      会把「源站已到 11/21、简报还在 11/9」误判成「没有更新」→
+      该重出的版本不重出，线上价格整天停在旧日期。
+      跨月更糟："12/1" < "11/30"。
+    """
+    m = re.match(r"^\s*(\d{1,2})/(\d{1,2})\s*$", str(s or ""))
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _sec_asof(sec, kw="数据日期"):
+    """板块角标里的数据日期，如「数据日期 11/20 · 鸡病专业网」。"""
+    m = re.search(r"%s\s*(\d{1,2}/\d{1,2})" % re.escape(kw), str(sec or ""))
+    return m.group(1) if m else ""
+
+
+def _used_state():
+    """上一版简报实际用的各品类日期 + 公鸡各产区日期。
+
+    分两部分：
+      used   —— 各品类的数据日期（老母鸡/三黄鸡/公鸡取速览卡末点，
+                鸡蛋取板块角标，白羽从白羽板块角标补）
+      regions—— 公鸡各产区的数据日期（从公鸡板块的表格行里逐行取）
+    公鸡必须**按产区**比：各产区发稿有先后（菏泽常慢一天），
+    只比一个总日期会把「只有某个产区更新了」误判成「没更新」。
+    """
+    path = os.path.join(HERE, "out", "today.json")
+    if not os.path.exists(path):
+        return {}, {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+        # 必须按绝对路径加载本工程的 build.py —— work/ 目录下也有一份同名模块
+        # （云端抓取工程），sys.path 里 work 优先，会导入错的那份。
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "morning_build", os.path.join(HERE, "build.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        cards = d.get("trend_cards") or []
+        secs = d.get("sections") or []
+        used = dict(mod._price_ctx(d, cards, secs).get("asof") or {})
+        # build.py 的 asof 只映射老母鸡/三黄鸡/公鸡三张卡 + 鸡蛋板块，
+        # 白羽没进去 —— 这里从白羽板块角标补上，否则白羽更新永远触发不了重出。
+        for s in secs:
+            if "白羽" in str(s.get("title") or ""):
+                a = _sec_asof(s)
+                if a:
+                    used["白羽肉鸡"] = a
+                break
+        # 公鸡各产区的日期（表格每行末尾带「数据M/D」）
+        regions = {}
+        for s in secs:
+            if "公鸡行情" not in str(s.get("title") or ""):
+                continue
+            for t in (s.get("tables") or []):
+                for r in (t.get("rows") or []):
+                    if len(r) < 5:
+                        continue
+                    m = re.search(r"数据\s*(\d{1,2}/\d{1,2})", str(r[4]))
+                    if m:
+                        regions[str(r[0])] = m.group(1)
+            break
+        return used, regions
+    except Exception as e:
+        print("[refresh] 读取上一版数据日期失败：%s" % e)
+        return {}, {}
+
+
+def _used_dates():
+    """上一版简报实际用的各品类数据日期（取自 out/today.json）。"""
+    used, _regions = _used_state()
+    return used
+
+
+def _probe_sig(probe):
+    """探针结果的指纹 —— 用来防止「同一份源站状态被反复重出」。
+
+    为什么需要（2026-11-21 修）：
+      探针的日期口径与简报的取数口径不可能百分百同源
+      （例如 817 的数据日是正文基准日+1，与标题日期差一天的情况偶有发生）。
+      口径一旦对不齐，就会出现「重出之后仍然判定有更新」的循环 ——
+      每 8:25/8:55 触发都重出一版、白推一次 GitHub。
+      指纹相同 = 源站状态没变 = 上次已经针对这份状态重出过了 → 不再重出。
+    """
+    return json.dumps(probe, ensure_ascii=False, sort_keys=True)
+
+
+def _sig_path():
+    return os.path.join(HERE, "out", ".refresh_sig.json")
+
+
+def _read_sig():
+    try:
+        with open(_sig_path(), encoding="utf-8") as f:
+            return json.load(f).get("sig")
+    except Exception:
+        return None
+
+
+def _write_sig(sig):
+    try:
+        with open(_sig_path(), "w", encoding="utf-8") as f:
+            json.dump({"sig": sig, "at": datetime.datetime.now().isoformat()}, f)
+    except Exception as e:
+        print("[refresh] 写刷新指纹失败：%s" % e)
+
+
 def source_has_newer():
     """源站有没有出比简报里更新的数据。
 
@@ -65,6 +176,13 @@ def source_has_newer():
        这条是兜底 —— 鸡病专业网的公鸡/817 没有便宜探针，靠它兜住。
     2. **逐品类比对**：上一版用的日期（取自 out/today.json —— 那正是上次出报时的数据）
        对比源站当前最新一期。任一品类更新了 ⇒ 该重出。
+
+    探针覆盖范围（2026-11-21 修）：原来只探博亚和讯（老母鸡/鸡蛋），
+    漏了鸡病专业网。鸡病专业网的公鸡是**按产区逐篇发稿**的，
+    菏泽/吉林/苏州那几篇常常在本机抓完之后才上线 ——
+    11/21 实测 08:44 抓到公鸡 11/20，08:50 源站就发了 11/21 的菏泽稿，
+    探针却报「源站无更新」→ 不重出 → 线上公鸡价整整差一天。
+    现在各品类的探针口径与简报取数口径一一对应（见 scrape.source_latest_dates）。
     """
     try:
         sys.path.insert(0, os.path.join(HERE, "work"))
@@ -86,55 +204,54 @@ def source_has_newer():
     except OSError:
         pass
 
-    used = _used_dates()
+    used, used_regions = _used_state()
     if not used:
         print("[refresh] 读不到上一版用的数据日期，跳过刷新判断")
         return False
 
     # 条件 2：逐品类比（源站最新一期 vs 简报已用）
-    src = {}
-    for key, fn in (("老母鸡", scrape.boyar_latest), ("鸡蛋", scrape.boyar_egg_latest)):
-        try:
-            url, ds = fn()
-            if ds:
-                src[key] = ds
-        except Exception:
-            continue
+    try:
+        probe = scrape.source_latest_dates() or {}
+    except Exception as e:
+        print("[refresh] 源站探针失败，跳过刷新判断：%s" % e)
+        return False
+
+    sig = _probe_sig(probe)
+    if _read_sig() == sig:
+        print("[refresh] 源站状态与上次重出时一致（指纹未变）→ 不重复重出")
+        return False
 
     stale = []
-    for cat, ds in src.items():
+    for cat, ds in probe.items():
+        if cat.startswith("_"):        # _regions 是明细，不直接参与比较
+            continue
         u = used.get(cat)
-        if u and ds > u:
+        if not u or not ds:
+            continue
+        ku, ks = _dkey(u), _dkey(ds)
+        if ku and ks and ks > ku:
             stale.append("%s（简报 %s → 源站 %s）" % (cat, u, ds))
+    # 公鸡：按产区逐个比（各产区发稿有先后，只比总日期会漏掉单产区的更新）
+    src_regions = probe.get("_regions") or {}
+    for label, ds in sorted(src_regions.items()):
+        u = used_regions.get(label)
+        if not ds:
+            continue
+        if not u:
+            stale.append("公鸡·%s（简报无此产区 → 源站 %s）" % (label, ds))
+            continue
+        ku, ks = _dkey(u), _dkey(ds)
+        if ku and ks and ks > ku:
+            stale.append("公鸡·%s（简报 %s → 源站 %s）" % (label, u, ds))
     if stale:
+        _write_sig(sig)
         print("[refresh] 源站有更新：%s" % "；".join(stale))
         return True
+    _write_sig(sig)
     print("[refresh] 源站无更新（简报已用 %s / 源站 %s）"
           % (", ".join("%s %s" % kv for kv in sorted(used.items())) or "无",
-             ", ".join("%s %s" % kv for kv in sorted(src.items())) or "无"))
+             ", ".join("%s %s" % kv for kv in sorted(probe.items()) if not kv[0].startswith("_")) or "无"))
     return False
-
-
-def _used_dates():
-    """上一版简报实际用的各品类数据日期（取自 out/today.json）。"""
-    path = os.path.join(HERE, "out", "today.json")
-    if not os.path.exists(path):
-        return {}
-    try:
-        with open(path, encoding="utf-8") as f:
-            d = json.load(f)
-        # 必须按绝对路径加载本工程的 build.py —— work/ 目录下也有一份同名模块
-        # （云端抓取工程），sys.path 里 work 优先，会导入错的那份。
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "morning_build", os.path.join(HERE, "build.py"))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        ctx = mod._price_ctx(d, d.get("trend_cards") or [], d.get("sections") or [])
-        return ctx.get("asof") or {}
-    except Exception as e:
-        print("[refresh] 读取上一版数据日期失败：%s" % e)
-        return {}
 
 
 def main():
