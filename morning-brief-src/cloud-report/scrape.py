@@ -107,6 +107,117 @@ def latest(arts, keyword, exclude=None):
     return best
 
 
+# 各产区日报的标题匹配（板块四采集 + 刷新探针共用一份，避免两处口径漂移）
+REGION_PATTERNS = [
+    (r"鲁西南（菏泽）地区麻鸡", "山东菏泽"),
+    (r"吉林黄花公鸡", "吉林"),
+    (r"西北（陕、甘、宁）地区麻鸡", "西北(陕甘宁)"),
+    (r"江苏（苏州）优公、黄花公鸡", "江苏苏州"),
+    (r"四川地区麻鸡、黄花公", "四川"),
+    (r"山东地区青脚麻鸡", "山东"),
+    (r"皖南地区817", "皖南"),
+    (r"皖北地区817", "皖北"),
+    (r"山西（阳城）麻鸡", "山西阳城"),
+    (r"山西（运城）麻鸡", "山西运城"),
+]
+
+
+def _latest_upto(arts, keyword, max_key):
+    """标题含 keyword、且日期 ≤ max_key 的最新一篇。
+
+    与 main() 里的 latest() 同义（源站会提前一天发次日稿，
+    那篇不是今天的行情，必须排除）。
+    """
+    best = None
+    for title, url in arts.items():
+        if keyword not in title:
+            continue
+        m = re.search(r"(\d+)月(\d+)日", title)
+        key = (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+        if key > max_key:
+            continue
+        if best is None or key > best[0]:
+            best = (key, title, url)
+    return best
+
+
+def source_latest_dates(today=None):
+    """源站各品类「当前最新一期」的日期 —— 给晨报刷新探针用。
+
+    为什么需要（2026-11-21 修）：
+      原来的刷新探针只查博亚和讯（老母鸡/鸡蛋），漏了鸡病专业网。
+      鸡病专业网的公鸡/817/白羽是**分篇按产区逐个发稿**的，
+      某篇产区稿（菏泽/吉林/苏州）常常在本机抓完之后才上线 ——
+      实测 11/21 08:44 本机抓到公鸡 11/20，08:50 源站就发了 11/21 的菏泽稿。
+      探针查不到 → 判定"源站无更新" → 不重出 → 线上公鸡价格整整差一天。
+
+    每个品类的日期口径与简报里用的完全一致（否则会出现"改了也没变"的死循环）：
+      老母鸡 → 博亚和讯《全国部分地区淘鸡出场价格》
+      鸡蛋   → 鸡病专业网《我国部分地区鸡蛋、淘汰鸡价格汇总》（20 主产省均价的来源）
+      三黄鸡 → 鸡病专业网《部分地区肉杂817棚前价格行情》
+      白羽   → 鸡病专业网《肉鸡行情分析》
+      公鸡   → 各产区日报，**按产区分列**返回（简报只取品种名含「公」的行，
+               所以公鸡的最终日期由那几个产区的最新日期决定）
+
+    返回 {"老母鸡": "M/D", ..., "_regions": {产区: "M/D"}}
+    """
+    import datetime as _dt
+    if today is None:
+        today = _dt.date.today()
+    max_key = (today.month, today.day)
+    out = {}
+
+    def _put(cat, d):
+        """只在比已有日期更新时才覆盖（同一品类可能有多条线索）。"""
+        if not d:
+            return
+        m = re.match(r"^\s*(\d+)/(\d+)\s*$", str(d))
+        if not m:
+            return
+        k = (int(m.group(1)), int(m.group(2)))
+        if k > max_key:
+            return
+        old = out.get(cat)
+        if not old:
+            out[cat] = d
+            return
+        om = re.match(r"^\s*(\d+)/(\d+)\s*$", str(old))
+        ok = (int(om.group(1)), int(om.group(2))) if om else None
+        if ok is None or k > ok:
+            out[cat] = d
+
+    # ---- 博亚和讯：老母鸡（淘鸡出场价）----
+    try:
+        _u, ds = boyar_latest()
+        _put("老母鸡", ds)
+    except Exception:
+        pass
+
+    # ---- 鸡病专业网：鸡蛋汇总 / 817 / 白羽 / 公鸡各产区 ----
+    try:
+        arts = collect_articles()
+    except Exception:
+        arts = {}
+    if arts:
+        hit = _latest_upto(arts, "鸡蛋、淘汰鸡价格汇总", max_key)
+        if hit:
+            _put("鸡蛋", "%d/%d" % hit[0])
+        hit = _latest_upto(arts, "肉杂817棚前", max_key)
+        if hit:
+            _put("三黄鸡", "%d/%d" % hit[0])
+        hit = _latest_upto(arts, "肉鸡行情分析", max_key)
+        if hit:
+            _put("白羽肉鸡", "%d/%d" % hit[0])
+        regions = {}
+        for pat, label in REGION_PATTERNS:
+            hit = _latest_upto(arts, pat, max_key)
+            if hit:
+                regions[label] = "%d/%d" % hit[0]
+        if regions:
+            out["_regions"] = regions
+    return out
+
+
 # ---------- 解析器 ----------
 
 def parse_summary(html):
@@ -2225,18 +2336,7 @@ def main():
               % (by["price"], len(ch["dates"]), ch["dates"][-3:]))
 
     # ===== 板块四：各地麻鸡/公鸡产区文章 =====
-    region_pats = [
-        (r"鲁西南（菏泽）地区麻鸡", "山东菏泽"),
-        (r"吉林黄花公鸡", "吉林"),
-        (r"西北（陕、甘、宁）地区麻鸡", "西北(陕甘宁)"),
-        (r"江苏（苏州）优公、黄花公鸡", "江苏苏州"),
-        (r"四川地区麻鸡、黄花公", "四川"),
-        (r"山东地区青脚麻鸡", "山东"),
-        (r"皖南地区817", "皖南"),
-        (r"皖北地区817", "皖北"),
-        (r"山西（阳城）麻鸡", "山西阳城"),
-        (r"山西（运城）麻鸡", "山西运城"),
-    ]
+    region_pats = REGION_PATTERNS
     live_rows = []
     brother_rows = []          # ② 快大类兄弟品种（青脚麻公/麻公/黄花公）= 鸡病专业网侧的三黄鸡参照
     BROTHER_RE = re.compile(r"青脚麻公|麻公鸡|黄花公|麻黄|青麻公")
