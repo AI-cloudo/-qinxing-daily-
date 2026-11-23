@@ -916,6 +916,9 @@ def gongji_factors(price, dir_, lo=None, hi=None, heze=None,
     mixed = len(dts) > 1
     all_today = (not mixed) and dts and _is_today(ctx, "公鸡")
     pfx_cnt = pfx if (not mixed and not dts) else ("今天" if all_today else "")
+    # 11-23 修：产区间报价横跨两天时，句首不能一口咬定「今天」——
+    # 有几个产区的价其实还是上一期的稿（11-17 定的规矩：日期一致性要连子句一起看）。
+    pfx_b = "" if mixed else pfx
     dm = _dmark(ctx, "公鸡")
     fd = flat_days or 0
     ct = cnt or {}
@@ -923,7 +926,7 @@ def gongji_factors(price, dir_, lo=None, hi=None, heze=None,
     n_moved = ct.get("up", 0) + ct.get("down", 0)
 
     if dir_ == "flat":
-        seg = "%s公鸡没动，%d个产区平均还是%s%s" % (pfx, n_total, p, dm)
+        seg = "%s公鸡没动，%d个产区平均还是%s%s" % (pfx_b, n_total, p, dm)
         if n_moved == 0 and ct:
             # 时间词要跟数据日期走：不是当天的报价，说成「今天」就跟客户对不上
             #（源站没发当日稿时容易犯，11-18 修）。日期已经由 _dmark 挂在价后面。
@@ -931,7 +934,6 @@ def gongji_factors(price, dir_, lo=None, hi=None, heze=None,
             # 这时不能说「今天都没动」，要把最旧那期单独点出来。
             if mixed:
                 seg += "，%d个产区报价一个都没动" % n_total
-                seg += "（最旧的一期是%s）" % dts[0]
             else:
                 seg += "，%d个产区报价%s一个都没动" % (n_total, pfx_cnt)
         elif n_moved:
@@ -940,10 +942,22 @@ def gongji_factors(price, dir_, lo=None, hi=None, heze=None,
             seg += "，连着%d个报价日没动" % fd
         f.append(("现在什么情况", seg + "。"))
     else:
-        seg = "%s公鸡%s，%d个产区平均%s%s" % (pfx, _dir_word(dir_), n_total, p, dm)
+        seg = "%s公鸡%s，%d个产区平均%s%s" % (pfx_b, _dir_word(dir_), n_total, p, dm)
         if n_moved:
             seg += "，%d个产区里%d个在动" % (n_total, n_moved)
         f.append(("现在什么情况", seg + "。"))
+
+    # 11-23 修：产区的报价可能横跨两天（菏泽/吉林/四川常慢一天发稿）。
+    # 11-20 修好了「一个都没动」那条（最旧的一期是X），但「N个在动」那条漏了 ——
+    # 结果正文说「今天有1个产区的价在动」，而那个产区其实还是昨天的稿，
+    # 客户拿自己那儿的 11/23 报价一比就穿帮（跟 11-17「子句里的今天露馅」同一类病）。
+    # 混着两天时：句首不说「今天」，句尾统一点出最旧那期。
+    if mixed and dts:
+        for _i, _ft in enumerate(f):
+            if _ft[0] == "现在什么情况":
+                f[_i] = ("现在什么情况",
+                         _ft[1][:-1] + "（最旧的一期是%s）。" % dts[0])
+                break
 
     # 公鸡走的是跟蛋、跟老母鸡都不挨着的一条线，所以先说清它看什么
     if dir_ == "flat":
