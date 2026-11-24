@@ -277,11 +277,17 @@ def _counts_txt(ups, downs, flats):
 
 
 def _ratio_phrase(n, total, word="涨"):
-    """「跌的省占了八成」—— 占比必须按实际家数说。
+    """「跌的省占了九成」—— 占比必须按实际家数说。
 
     2026-11-19 修：原来「涨/跌的省快一半」是写死的。
     11/19 鸡蛋 20 个主产省里 16 个在跌（八成），正文却说「跌的省快一半」，
     销售念给客户听，客户一比就穿帮（跟 11-17「同一页两套口径」同一类病）。
+
+    2026-11-24 修：档位不够细，把 90% 说成「八成」。
+    11/24 鸡蛋 20 个主产省里 18 个在跌（九成），正文却说「跌的省占了八成」，
+    同一句里前面写了「18个在跌」，后面占八成 —— 客户一算就穿帮。
+    另：原来 r<0.5 一律说「快一半」，可 40% 也说「快一半」是往大了说，
+    同样会跟家数打架（整体方向门槛是 4 成，所以 40% 是真的会走到这句的）。
     """
     try:
         n = float(n or 0)
@@ -291,13 +297,19 @@ def _ratio_phrase(n, total, word="涨"):
     if not total or not n:
         return ""
     r = n / total
-    if r >= 0.75:
+    if r >= 0.995:
+        return "全都%s" % word
+    if r >= 0.85:
+        return "%s的省占了九成" % word
+    if r >= 0.72:
         return "%s的省占了八成" % word
-    if r >= 0.62:
+    if r >= 0.58:
         return "%s的省占了七成" % word
-    if r >= 0.5:
+    if r >= 0.48:
         return "%s的省过半" % word
-    return "%s的省快一半" % word
+    if r >= 0.28:
+        return "%s的省不到一半" % word
+    return "只有零星几个%s" % word
 
 
 def _mover_sentence(movers, verb="跌"):
