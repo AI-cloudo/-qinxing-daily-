@@ -318,9 +318,16 @@ def _mover_sentence(movers, verb="跌"):
     2026-11-19 修：有些表的涨跌列只给箭头、不给金额（博亚分省出场价表就是），
     这时 _fen(0) 会拼出「陕西省涨没动」——涨和没动自相矛盾，销售念出来客户当场问穿。
     拿不到金额就不报金额，只说省名和方向。
+
+    2026-11-26 修：原来只取前 3 个（[:3]），第 4 个起被**静默丢掉** ——
+    11/26 鸡蛋 20 个主产省里有 4 个在跌，正文却只列 3 个（江苏↓2分不见了），
+    读者拿「16个持平」一加就发现 16+3=19 ≠ 20。
+    跟 11-19「涨没动」是同一类病：**同一句话里出现的家数和明细必须对得上**。
+    现在最多列 6 个；真的更多时写「等N个」，总数始终能对上。
     """
     segs = []
-    for m in (movers or [])[:3]:
+    ms = list(movers or [])
+    for m in ms[:6]:
         name, d, a = m[0], m[1], m[2]
         v = verb if d == "down" else "涨"
         try:
@@ -331,7 +338,10 @@ def _mover_sentence(movers, verb="跌"):
             segs.append("%s%s" % (name, v))     # 金额未知：只说方向，不编「没动」
         else:
             segs.append("%s%s%s" % (name, v, _fen(amt)))
-    return "、".join(segs)
+    txt = "、".join(segs)
+    if len(ms) > 6:
+        txt += "等%d个" % len(ms)
+    return txt
 
 
 def _prov_mover_txt(movers):
@@ -508,7 +518,6 @@ def egg_factors(egg_avg, egg_dir, stat=None, ctx=None):
     #  方向判定在 build.py：涨/跌的省要占 4 成以上才算整体方向，否则整体=没动。）
     mv_d = _mover_sentence(st.get("movers_down"), "跌")
     mv_u = _mover_sentence(st.get("movers_up"), "涨")
-    mv = "、".join(x for x in (mv_d, mv_u) if x)
     n_moved = (up_n or 0) + (down_n or 0)
     if egg_dir == "up":
         seg = "%s鸡蛋整体在涨，全国平均%s%s" % (pfx, e, dm)
@@ -529,11 +538,13 @@ def egg_factors(egg_avg, egg_dir, stat=None, ctx=None):
         if total:
             if n_moved == 0:
                 seg += "，%d个主产省里%d个持平，一个动的都没有" % (total, flat_n or total)
-            elif mv:
-                seg += ("，%d个主产省里%d个持平，就%s——这是个别地方的区域性动作，"
-                        "不代表整体" % (total, flat_n or 0, mv))
             else:
-                seg += "，%d个主产省里%d个持平" % (total, flat_n or 0)
+                # 2026-11-26 修：原来这里只写「16个持平，就A跌x分、B跌y分、C跌z分」——
+                # movers 被截到 3 个，读者一加 16+3=19 ≠ 20（20 个主产省），
+                # 差的那个省正好不翼而飞。现在把「N个在跌（明细）」摆出来，
+                # 家数和明细永远对得上（与 11-19「涨没动」同一类病，同一处治）。
+                seg += ("，%d个主产省里%s——这是个别地方的区域性动作，"
+                        "不代表整体" % (total, _egg_counts(up_n, down_n, flat_n, mv_d, mv_u)))
         f.append(("现在什么情况", seg + "。"))
 
     # ② 为什么
