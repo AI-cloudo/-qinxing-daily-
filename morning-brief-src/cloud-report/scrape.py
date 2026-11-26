@@ -1335,20 +1335,26 @@ def _count_dirs(sec):
     return (up, fl, dn)
 
 
-def _flat_verify_gj(times=5):
-    """公鸡卡「连续同值」的源头复核 v2（2026-11-16 修正误报）。
+def _flat_verify_gj(times=5, cur_rows=None):
+    """公鸡卡「连续同值」的源头复核 v3（2026-11-26 修正 v2 的误报）。
 
     v1 缺陷：拿《817、麻鸡成鸡、鸡苗价格行情汇总》里**所有「元/斤」行**当公鸡卡
     样本比对。实际卡片样本 = 各产区日报中品种名含「公」的行；汇总稿里的
     「麻鸡成鸡：社会鸡收购…元/斤，稳/落」行一变动（哪怕只是趋势词换了、价格数字
     没动），v1 就误报"页面未同步"（2026-11-16 实测误报一例）。
 
-    v2 直接对卡片真实样本复核，两步判别：
-      ① 源站活性：全产区汇总稿近 N 期日期有推进（≥2 个不同日期）
-      ② 卡片样本：各产区日报近 N 期「公」行价格逐期比对（与主采集 region_pats 同源）
-         · 全部一致 → 源站每日发新稿、公鸡报价零变动 → 已复核真实横盘 → 通过
-         · 有变动   → 源动了卡片没跟上（疑抓取/解析失败）→ 不通过
-    返回 (通过?, 结论文案)
+    v2 缺陷（11-26 实测又误报一例）：v2 改对了样本，但仍是拿各产区日报
+    **相邻两期**的价做差 —— 只要历史上任意一期动过就报「页面未同步」。
+    可卡片显示的是**最新一期**的价，「历史上动过」≠「页面没跟上」。
+    实证：吉林 11/22 由 5.80-6.20 涨到 6.20-6.50，之后 11/22~11/25 一直是 6.20-6.50；
+    卡片 11/22 就已经用新价（均价 5.99→6.05），连着 5 点 6.05 是**真横盘**，
+    v2 却把它误报成「页面未同步（疑抓取或解析失败）」。
+
+    v3 改成真正该问的那句：**页面当前这一期的报价 == 源站那一天的稿吗？**
+      · 同一天稿、价一样   → 页面没掉队，卡片横盘是真的 → 通过
+      · 同一天稿、价不一样 → 抓取或解析出错 → 不通过
+      · 源站已发了更新的稿 → 页面确实落后了 → 不通过（并说明差在哪天）
+    cur_rows：页面当前的公鸡板块表格行（调用方传入）。
     """
     try:
         arts = {}
@@ -1373,46 +1379,77 @@ def _flat_verify_gj(times=5):
             return (False, "复核未完成：近 %d 期全产区汇总稿日期未推进，疑源站停更"
                            % min(len(zl), times))
 
-        # ② 卡片样本：各产区日报「公」行逐期比对（价格只比数字，天然排除稳/落等趋势词）
-        region_pats = [
-            (r"鲁西南（菏泽）地区麻鸡", "山东菏泽"),
-            (r"吉林黄花公鸡", "吉林"),
-            (r"西北（陕、甘、宁）地区麻鸡", "西北(陕甘宁)"),
-            (r"江苏（苏州）优公、黄花公鸡", "江苏苏州"),
-            (r"四川地区麻鸡、黄花公", "四川"),
-            (r"山东地区青脚麻鸡", "山东"),
-            (r"皖南地区817", "皖南"),
-            (r"皖北地区817", "皖北"),
-        ]
-        checked, diffs = 0, []
-        for pat, label in region_pats:
+        def _norm_breed(nm):
+            # 与主采集同口径：源文引导语会把「方面/行情/价格」写进品种名
+            for suf in ("方面", "行情", "价格"):
+                if nm.endswith(suf) and len(nm) > len(suf) + 1:
+                    nm = nm[: -len(suf)]
+            return nm
+
+        # ② 页面当前的「公」行报价（与速览卡同口径：品种名含「公」）
+        page = {}
+        for r in (cur_rows or []):
+            try:
+                label, breed, price, _cell, dtag = r[0], r[1], r[2], r[3], r[4]
+            except (IndexError, TypeError):
+                continue
+            if "公" not in str(breed):
+                continue
+            if "滞后" in str(dtag) or "未日更" in str(dtag):
+                continue
+            dm = re.search(r"(\d+)/(\d+)", str(dtag))
+            page.setdefault(str(label), {})[_norm_breed(str(breed))] = (
+                str(price), (int(dm.group(1)), int(dm.group(2))) if dm else (0, 0))
+
+        # ③ 逐产区：页面当前值 vs 源站**那一天**的稿
+        checked, diffs, stale = 0, [], []
+        for pat, label in REGION_PATTERNS:
+            mine = page.get(label)
+            if not mine:
+                continue
             hits = sorted([(t, u) for t, u in arts.items() if re.search(pat, t)],
-                          key=lambda x: _key(x[0]), reverse=True)[:times]
-            seq = []
-            for t, u in hits:
-                try:
-                    items = parse_region_prices(fetch(u, timeout=25))
-                except Exception:
-                    continue
-                gong = [(n, p) for n, p, _c in items if "公" in n]
-                if gong:
-                    seq.append((_key(t), gong))
-            if len(seq) < 2:
+                          key=lambda x: _key(x[0]), reverse=True)
+            if not hits:
+                continue
+            # 页面用的是哪一天 → 就找那一天的稿来对（数据日期逐产区各自不同）
+            pdate = sorted({v[1] for v in mine.values() if v[1]})
+            want = pdate[-1] if pdate else (0, 0)
+            same_day = [(t, u) for t, u in hits if _key(t) == want]
+            if same_day:
+                t, u = same_day[0]
+            else:
+                t, u = hits[0]        # 找不到同一天的稿 → 拿最新的对，差异另报
+            try:
+                items = parse_region_prices(fetch(u, timeout=25))
+            except Exception:
+                continue
+            src = {}
+            for n, p, _c in items:
+                if "公" in n:
+                    src[_norm_breed(n)] = p
+            if not src:
                 continue
             checked += 1
-            for i in range(1, len(seq)):
-                cur = dict(seq[i - 1][1])   # 较新一期
-                prv = dict(seq[i][1])       # 较早一期
-                for n in set(cur) | set(prv):
-                    if cur.get(n) != prv.get(n):
-                        diffs.append("%s %s: %s→%s" % (label, n, prv.get(n), cur.get(n)))
+            for n, (pv, _pd) in mine.items():
+                if n in src and src[n] != pv:
+                    diffs.append("%s %s：页面 %s，源站同日稿 %s"
+                                 % (label, n, pv, src[n]))
+            # 源站有没有比页面更新的稿
+            if want and _key(hits[0][0]) > want:
+                hk = _key(hits[0][0])
+                stale.append("%s（页面 %d/%d → 源站 %d/%d）"
+                             % (label, want[0], want[1], hk[0], hk[1]))
+
         if checked < 3:
-            return (False, "复核未完成：仅 %d 个产区日报有连续两期可解析（需 ≥3）" % checked)
+            return (False, "复核未完成：仅 %d 个产区日报可与页面比对（需 ≥3）" % checked)
         if diffs:
-            return (False, "复核发现源站公鸡报价已变动（%s%s），页面未同步（疑抓取或解析失败）"
+            return (False, "复核发现页面与源站同日稿报价不一致（%s%s）"
                            % (diffs[0][:44], "；共 %d 处" % len(diffs) if len(diffs) > 1 else ""))
-        return (True, "已复核：近 %d 期 %d 个产区日报「公」行报价逐期一致，且全产区汇总稿"
-                      "日期正常推进 → 公鸡属真实横盘" % (times, checked))
+        if stale:
+            return (False, "复核发现源站已发更新的稿，页面还是旧的（%s）"
+                           % "、".join(stale[:3]))
+        return (True, "已复核：%d 个产区的页面报价与源站同日稿逐项一致 → 公鸡属真实横盘"
+                      % checked)
     except Exception as e:
         return (False, "复核未完成（%s）" % str(e)[:40])
 
@@ -1583,7 +1620,15 @@ def run_selfcheck(d, today):
             continue
         val = fmt(vs[-1])
         if "公鸡" in nm:
-            okv, vmsg = _flat_verify_gj()
+            # v3：把页面当前的公鸡行传进去，才能「拿页面这期的数 vs 源站那天的稿」比对
+            gj_rows = []
+            gi = _sec_of(nm)
+            if gi is not None and gi < len(secs):
+                for t in (secs[gi].get("tables") or []):
+                    if t.get("rows"):
+                        gj_rows = t["rows"]
+                        break
+            okv, vmsg = _flat_verify_gj(cur_rows=gj_rows)
             add(nm, "连续同值", ds[-1], "ok" if okv else "warn",
                 "连续 5 点均为 %s·%s" % (val, vmsg))
             continue
